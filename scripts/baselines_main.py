@@ -156,7 +156,7 @@ def adversary(actor, obs):
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality='velocity')
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality='angular')
 
     return obs
 
@@ -181,6 +181,11 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
     if(target_modality == 'velocity'):
         targeted_features = input_vals.clone()
         targeted_features[13:19] += eps*input_vals.grad[13:19].sign()
+        perturbed_out = targeted_features
+    if(target_modality == 'angular'):
+        targeted_features = input_vals.clone()
+        targeted_features[0:13] += eps*input_vals.grad[0:13].sign()
+        targeted_features[19:] += eps*input_vals.grad[19:].sign()
         perturbed_out = targeted_features
     else:
         perturbed_out = input_vals + eps*input_vals.grad.sign()
