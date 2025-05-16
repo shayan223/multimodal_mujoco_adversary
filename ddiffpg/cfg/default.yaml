@@ -1,0 +1,35 @@
+defaults:
+  - algo: ddiffpg_algo
+  - logging: default
+  - _self_
+
+num_envs: 256
+eval_num_envs: 20
+device: 'cuda'
+sim_device: 'cuda'
+rl_device: ${.device}
+graphics_device_id: 0
+seed: 42
+log_freq: 2
+eval_freq: 100
+max_step: 4000000
+max_time: 3600 # in seconds
+
+artifact: null
+env:
+  env_kwargs: null
+  name: 'antmaze-v1'
+  reward_type: 'sparse'
+  random_init: False
+  resolution: None
+
+diffusion:
+  diffusion_iter: 5
+  action_lr: 0.03
+  update_times: 20
+
+intrinsic:
+  type: 'noveld'  # 'rnd'
+  normalize: False
+  pos_enc: True
+  L: 10

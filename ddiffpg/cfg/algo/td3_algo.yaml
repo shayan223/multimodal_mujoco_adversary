@@ -1,0 +1,32 @@
+defaults:
+  - actor_critic.yaml
+  - _self_
+
+name: "TD3"
+horizon_len: 1
+memory_size: 1e6
+batch_size: 4096
+nstep: 1
+tau: 0.05
+gamma: 0.99
+warm_up: 32
+act_class: TanhMLPPolicy
+cri_class: DistributionalDoubleQ
+
+update_times: 8
+no_tgt_actor: True
+
+noise:
+  type: 'mixed' # ['fixed', 'mixed']
+  decay: null  #  "exp" and "linear"
+  exp_decay_rate: 0.99
+  lin_decay_iters: 10000
+  std_max: 0.6
+  std_min: 0.05
+  tgt_pol_std: 0.8
+  tgt_pol_noise_bound: 0.2
+
+distl: False
+v_min: 0
+v_max: 5
+num_atoms: 51

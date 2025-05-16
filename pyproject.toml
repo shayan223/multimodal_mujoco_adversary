@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "DDiffPG"
+version = "0.1.0"
+description = "Learning Multimodal Behavior from Scratch with Diffusion Policy Gradient"
+authors = ["Anonymous"]
+
+[tool.poetry.dependencies]
+# python = ">=3.7, <3.9"
+gym = "^0.23.1"
+gymnasium = "^0.28.1"
+hydra-core = "^1.2.0"
+loguru = ">=0.6.0"
+wandb = "^0.17.5"
+cloudpickle = "^2.2.0"
+scipy = "^1.7.3"
+shortuuid = "^1.0.11"
+diffusers = "^0.18.2"
+seaborn = "^0.13.1"
+pyclustering = "^0.10.1.2"
+dtaidistance = "^2.3.11"
+Cython = "^3.0.0a10"
+hydra = "^2.5"
+torch = "^2.0.0"
+panda-gym = "^3.0.7"
+D4RL = "^1.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

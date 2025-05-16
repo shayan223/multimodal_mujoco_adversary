@@ -1,0 +1,43 @@
+defaults:
+  - actor_critic.yaml
+  - _self_
+
+name: "DDiffPG"
+horizon_len: 1
+memory_size: 2000  # number of trajectories
+batch_size: 4096
+nstep: 1
+tau: 0.05
+gamma: 0.99
+warm_up: 500
+act_class: TanhMLPPolicy
+cri_class: DistributionalDoubleQ
+
+update_times: 8
+no_tgt_actor: True
+
+exp:
+  type: 'prop' # ['prop', 'fixed', 'linear']
+  fix_ratio: 0.5
+  stop_ratio: 0.7
+  mode_embedding: False
+
+noise:
+  type: 'mixed' # ['fixed', 'mixed']
+  decay: null  #  "exp" and "linear"
+  exp_decay_rate: 0.99
+  lin_decay_iters: 10000
+  std_max: 0.6
+  std_min: 0.05
+  tgt_pol_std: 0.8
+  tgt_pol_noise_bound: 0.2
+
+distl: False
+v_min: 0
+v_max: 5
+num_atoms: 51
+
+cluster_threshold: null
+use_downsampling: False
+use_embedding: False
+embedding_dim: 5
