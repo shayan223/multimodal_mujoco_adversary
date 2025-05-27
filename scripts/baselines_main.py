@@ -21,6 +21,8 @@ from ddiffpg.wrappers.pybullet_wrapper import PybulletEnvWrapper
 from ddiffpg.utils.common import Tracker, preprocess_cfg
 from ddiffpg.utils.plot_util import plot_traj
 
+from art.defences.preprocessor import PixelDefend 
+
     
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
 def main(cfg: DictConfig):
@@ -85,6 +87,10 @@ def main(cfg: DictConfig):
 
                 ######## Adversarial injection ##########
                 obs = adversary(agent,obs)
+
+                ######## Defence purification ##########
+                obs = defender(obs)
+                
                 #########################################
 
                 if cfg.algo.obs_norm:
@@ -194,6 +200,14 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
     
     return perturbed_out.detach()
 
+
+def defender(adv_input, defence='PixelDefend'):
+
+    if(defence == 'PixelDefend'):
+        defence_method = PixelDefend(clip_values=(-1000,1000))
+        purified_input = defence_method(adv_input)
+
+    return purified_input
 
 
 if __name__ == '__main__':
