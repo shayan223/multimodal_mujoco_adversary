@@ -201,12 +201,18 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
     return perturbed_out.detach()
 
 
-def defender(adv_input, defence='PixelDefend'):
+def defender(adv_input, defence=None):
 
     if(defence == 'PixelDefend'):
         defence_method = PixelDefend(clip_values=(-1000,1000))
         purified_input = defence_method(adv_input)
+    elif(defence == 'Gaussian'):
+        scaling_factor = 0.005
+        purified_input = adv_input + (torch.randn_like(adv_input) * scaling_factor)
+    else:
+        purified_input = adv_input
 
+    
     return purified_input
 
 
