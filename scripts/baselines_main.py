@@ -89,7 +89,7 @@ def main(cfg: DictConfig):
                 obs = adversary(agent,obs)
 
                 ######## Defence purification ##########
-                obs = defender(obs)
+                obs = defender(obs,defence='Gaussian')
                 
                 #########################################
 
@@ -218,3 +218,4 @@ def defender(adv_input, defence=None):
 
 if __name__ == '__main__':
     main()
+
