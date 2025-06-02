@@ -5,6 +5,7 @@ import gym
 import gymnasium
 import numpy as np
 import torch
+import pandas as pd
 from omegaconf import DictConfig
 
 import ddiffpg
@@ -25,7 +26,7 @@ from art.defences.preprocessor import PixelDefend
 
     
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig):
+def main(cfg: DictConfig, generate_dataset=False):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -71,8 +72,17 @@ def main(cfg: DictConfig):
         if trajectory is not None:
             memory.add_to_buffer(trajectory)
 
+    if(generate_dataset == True):
+        benign_dataset = []
+        adv_dataset = []
+
     for iter_t in count():
         if iter_t % cfg.eval_freq == 0:
+
+            #For Dataset Collection
+            dataset_buffer = [] #holds onto observations until we know they are worth keeping
+            dataset_adv_buffer = [] #holds onto adversarial observations in parrallel with dataset_buffer
+
             num_envs = cfg.eval_num_envs
             max_step = eval_env.max_episode_length
             actor = agent.actor
@@ -86,11 +96,20 @@ def main(cfg: DictConfig):
             for i_step in range(max_step):  # run an episode
 
                 ######## Adversarial injection ##########
+
+                if(generate_dataset == True):
+                    #hold on to the benign observation for the dataset
+                    dataset_buffer.append(obs.clone().detach().cpu().numpy())
+
                 obs = adversary(agent,obs)
+
+                if(generate_dataset == True):
+                    #Hold onto the perturbed sample as well
+                    dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
 
                 ######## Defence purification ##########
                 obs = defender(obs,defence='Gaussian')
-                
+
                 #########################################
 
                 if cfg.algo.obs_norm:
@@ -109,6 +128,13 @@ def main(cfg: DictConfig):
                 obs = next_obs
 
             ret_mean = return_tracker.mean()
+
+            #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
+            if(generate_dataset == True):
+                if(ret_mean > 0:)
+                    benign_dataset.append(dataset_buffer)
+                    adv_dataset.append(dataset_adv_buffer)
+
             step_mean = step_tracker.mean()
             if ret_mean >= ret_max:
                 ret_max = ret_mean
@@ -155,6 +181,10 @@ def main(cfg: DictConfig):
         if global_steps > cfg.max_step:
             break
 
+    #Save the collected dataset of observations
+    if(generate_dataset == True):
+        benign_dataset_df = pd.Dataframe(benign_dataset).to_csv('./benign_obs_data.csv')
+        adv_dataset_df = pd.Dataframe(adv_dataset).to_csv('./adversarial_obs_data.csv')
 
 def adversary(actor, obs):
 
@@ -218,4 +248,3 @@ def defender(adv_input, defence=None):
 
 if __name__ == '__main__':
     main()
-
