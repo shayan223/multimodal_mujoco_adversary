@@ -26,7 +26,7 @@ from art.defences.preprocessor import PixelDefend
 
     
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False):
+def main(cfg: DictConfig, generate_dataset=True):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -100,15 +100,17 @@ def main(cfg: DictConfig, generate_dataset=False):
                 if(generate_dataset == True):
                     #hold on to the benign observation for the dataset
                     dataset_buffer.append(obs.clone().detach().cpu().numpy())
-
-                obs = adversary(agent,obs)
+                
+                #we don't apply the adversarial perturbation when collecting data, as not to disrupt the agent
+                else:
+                    obs = adversary(agent,obs)
 
                 if(generate_dataset == True):
                     #Hold onto the perturbed sample as well
                     dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
-
-                ######## Defence purification ##########
-                obs = defender(obs,defence='Gaussian')
+                else:
+                    ######## Defence purification ##########
+                    obs = defender(obs,defence='Gaussian')
 
                 #########################################
 
@@ -131,7 +133,7 @@ def main(cfg: DictConfig, generate_dataset=False):
 
             #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
             if(generate_dataset == True):
-                if(ret_mean > 0:)
+                if(ret_mean > 0):
                     benign_dataset.append(dataset_buffer)
                     adv_dataset.append(dataset_adv_buffer)
 
