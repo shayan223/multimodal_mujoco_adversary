@@ -27,7 +27,7 @@ from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian'):
+def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -44,7 +44,7 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian'):
         print('CURRENT ENV TYPE: ', type(env))
         #Here we wrap the env to include our defense method in training
         if(defence_method is not None):
-            env = DefenceObsWrapper(env, episode_len)
+            env = DefenceObsWrapper(env, episode_len, defence_method)
         else:
             env = D4RLEnvWrapper(env, episode_len)
 
@@ -282,13 +282,13 @@ def defender(defence=None):
 
 
 class DefenceObsWrapper:
-    def __init__(self, env, episode_len):
+    def __init__(self, env, episode_len, defence_method):
         self.env = env
         self.observation_space = np.zeros(self.env.observation_space.shape[1])
         self.action_space = np.zeros(self.env.action_space.shape[1])
         self.max_episode_length = episode_len
         self.device = torch.device("cuda:0")
-        self.defence_func = defender('Gaussian')
+        self.defence_func = defender(defence_method)
 
 
     def reset(self):
