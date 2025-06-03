@@ -222,11 +222,12 @@ def adversary(actor, obs):
 
 
 
-def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
+def fgsm_attack(model, input_vals, eps=0.007, target_modality=None,outputs=None) :
     
     input_vals.requires_grad = True
             
-    outputs = model.actor(input_vals)
+    if(outputs is None):
+        outputs = model.actor(input_vals)
     
     model.actor.zero_grad()
     actor_loss = model.update_actor(input_vals,skip_weight_update=True)
@@ -288,6 +289,7 @@ class DefenceObsWrapper:
         self.action_space = np.zeros(self.env.action_space.shape[1])
         self.max_episode_length = episode_len
         self.device = torch.device("cuda:0")
+        self.defence_method = defence_method
         self.defence_func = defender(defence_method)
 
 
