@@ -45,7 +45,6 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian'):
         #Here we wrap the env to include our defense method in training
         if(defence_method is not None):
             env = DefenceObsWrapper(env, episode_len)
-            pass
         else:
             env = D4RLEnvWrapper(env, episode_len)
 
@@ -53,7 +52,6 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian'):
         #Here we wrap the env to include our defense method in training
         #if(defence_method is not None):
             #eval_env = DefenceObsWrapper(eval_env, episode_len,defence_method)
-            #pass
         eval_env = D4RLEnvWrapper(eval_env, episode_len)
 
     else:
@@ -226,20 +224,14 @@ def adversary(actor, obs):
 
 def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
     
-    #input_vals = input_vals.to(device)
-    #labels = labels.to(device)
     input_vals.requires_grad = True
             
     outputs = model.actor(input_vals)
     
     model.actor.zero_grad()
-    #cost = loss(outputs, labels).to(device)
     actor_loss = model.update_actor(input_vals,skip_weight_update=True)
-    #cost.backward()
-    #print(input_vals)
+
     #modify just one modality (13 through 18 are velocity vectors)
-    #print(input_vals.shape)
-    #print(input_vals[13:19].shape)
     if(target_modality == 'velocity'):
         targeted_features = input_vals.clone()
         targeted_features[13:19] += eps*input_vals.grad[13:19].sign()
@@ -251,8 +243,7 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
         perturbed_out = targeted_features
     else:
         perturbed_out = input_vals + eps*input_vals.grad.sign()
-    #perturbed_out = torch.clamp(perturbed_out, -1, 1)
-    #print(perturbed_out)
+
     
     return perturbed_out.detach()
 
