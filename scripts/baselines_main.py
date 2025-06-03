@@ -23,10 +23,11 @@ from ddiffpg.utils.common import Tracker, preprocess_cfg
 from ddiffpg.utils.plot_util import plot_traj
 
 from art.defences.preprocessor import PixelDefend 
+from gymnasium.vector import VectorEnvWrapper
+from gymnasium import ObservationWrapper
 
-    
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -34,13 +35,27 @@ def main(cfg: DictConfig, generate_dataset=True):
     
     if 'antmaze' in cfg.env.name:
         env = gym.make(cfg.env.name, reward_type=cfg.env.reward_type, random_init=cfg.env.random_init)
+
         episode_len = env._max_episode_steps
         env_kwargs = env.env.env.spec.kwargs
         cfg.env.env_kwargs = env_kwargs
+
         env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.num_envs, random_init=cfg.env.random_init)
-        env = D4RLEnvWrapper(env, episode_len)
+        print('CURRENT ENV TYPE: ', type(env))
+        #Here we wrap the env to include our defense method in training
+        if(defence_method is not None):
+            env = DefenceObsWrapper(env, episode_len)
+            pass
+        else:
+            env = D4RLEnvWrapper(env, episode_len)
+
         eval_env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.eval_num_envs, random_init=cfg.env.random_init)
+        #Here we wrap the env to include our defense method in training
+        #if(defence_method is not None):
+            #eval_env = DefenceObsWrapper(eval_env, episode_len,defence_method)
+            #pass
         eval_env = D4RLEnvWrapper(eval_env, episode_len)
+
     else:
         env = gymnasium.vector.make(cfg.env.name, control_type='joints', num_envs=cfg.num_envs)
         env = PybulletEnvWrapper(env)
@@ -108,9 +123,11 @@ def main(cfg: DictConfig, generate_dataset=True):
                 if(generate_dataset == True):
                     #Hold onto the perturbed sample as well
                     dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
-                else:
+                
+                if(defence_method is not None):
                     ######## Defence purification ##########
-                    obs = defender(obs,defence='Gaussian')
+                    defence_func = defender(defence='Gaussian')
+                    obs = defence_func(obs)
 
                 #########################################
 
@@ -239,7 +256,7 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
     
     return perturbed_out.detach()
 
-
+'''
 def defender(adv_input, defence=None):
 
     if(defence == 'PixelDefend'):
@@ -253,6 +270,67 @@ def defender(adv_input, defence=None):
 
     
     return purified_input
+'''
+def defender(defence=None):
+
+    if(defence == None):
+        def no_defend(obs):
+            return obs
+        return no_defend
+
+    if(defence == 'Gaussian'):
+        def gaussian_defend(obs):
+            scaling_factor = 0.005
+            if isinstance(obs, np.ndarray):
+                obs = obs + (np.random.normal(size=obs.shape) * scaling_factor)
+            else:
+                obs = obs + (torch.randn_like(obs) * scaling_factor)
+            return obs
+        return gaussian_defend
+
+
+
+class DefenceObsWrapper:
+    def __init__(self, env, episode_len):
+        self.env = env
+        self.observation_space = np.zeros(self.env.observation_space.shape[1])
+        self.action_space = np.zeros(self.env.action_space.shape[1])
+        self.max_episode_length = episode_len
+        self.device = torch.device("cuda:0")
+        self.defence_func = defender('Gaussian')
+
+
+    def reset(self):
+        ob = self.env.reset()
+        ob = self.defence_func(ob)
+        return self.cast(ob)
+
+    def step(self, actions):
+        actions = actions.cpu().numpy()
+        next_obs, rewards, dones, infos = self.env.step(actions)
+        next_obs = self.defence_func(next_obs)
+        timeout = torch.zeros(dones.shape).bool().to(self.device)
+        success = torch.zeros(dones.shape).to(self.device)
+        for i in range(len(infos)):
+            if len(infos[i]) == 0:
+                pass
+            else:
+                if "TimeLimit.truncated" in infos[i].keys():
+                    timeout[i] = infos[i]["TimeLimit.truncated"]
+                if "success" in infos[i].keys():
+                    success[i] = infos[i]["success"]
+        info_ret = {"time_outs": timeout, "success": success}
+
+        return (
+            self.cast(next_obs),
+            self.cast(rewards),
+            self.cast(dones).long(),
+            info_ret,
+        )
+
+    def cast(self, x):
+        x = torch.Tensor(x).to(self.device)
+        return x
 
 
 if __name__ == '__main__':
