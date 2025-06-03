@@ -134,6 +134,7 @@ def main(cfg: DictConfig, generate_dataset=True):
             #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
             if(generate_dataset == True):
                 if(ret_mean > 0):
+                    print("Sucessfull episode, saving data!")
                     benign_dataset.append(dataset_buffer)
                     adv_dataset.append(dataset_adv_buffer)
 
@@ -185,8 +186,14 @@ def main(cfg: DictConfig, generate_dataset=True):
 
     #Save the collected dataset of observations
     if(generate_dataset == True):
-        benign_dataset_df = pd.DataFrame(benign_dataset).to_csv('./benign_obs_data.csv')
-        adv_dataset_df = pd.DataFrame(adv_dataset).to_csv('./adversarial_obs_data.csv')
+        print('##############')
+        print('Saving Dataset! ')
+        benign_dataset_df = pd.DataFrame(benign_dataset)
+        benign_dataset_df.to_csv('./benign_obs_data.csv')
+        adv_dataset_df = pd.DataFrame(adv_dataset)
+        adv_dataset_df.to_csv('./adversarial_obs_data.csv')
+        print('Dataset Saved!')
+        print('###############')
 
 def adversary(actor, obs):
 
