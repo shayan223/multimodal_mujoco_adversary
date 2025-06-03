@@ -185,8 +185,8 @@ def main(cfg: DictConfig, generate_dataset=True):
 
     #Save the collected dataset of observations
     if(generate_dataset == True):
-        benign_dataset_df = pd.Dataframe(benign_dataset).to_csv('./benign_obs_data.csv')
-        adv_dataset_df = pd.Dataframe(adv_dataset).to_csv('./adversarial_obs_data.csv')
+        benign_dataset_df = pd.DataFrame(benign_dataset).to_csv('./benign_obs_data.csv')
+        adv_dataset_df = pd.DataFrame(adv_dataset).to_csv('./adversarial_obs_data.csv')
 
 def adversary(actor, obs):
 
