@@ -150,8 +150,9 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
             if(generate_dataset == True):
                 if(ret_mean > 0):
                     print("Sucessfull episode, saving data!")
-                    benign_dataset.append(dataset_buffer)
-                    adv_dataset.append(dataset_adv_buffer)
+                    #extend dataset to include new values, rather than nesting lists
+                    benign_dataset.extend(dataset_buffer)
+                    adv_dataset.extend(dataset_adv_buffer)
 
             step_mean = step_tracker.mean()
             if ret_mean >= ret_max:
@@ -204,9 +205,9 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
         print('##############')
         print('Saving Dataset! ')
         benign_dataset_df = pd.DataFrame(benign_dataset)
-        benign_dataset_df.to_csv('./benign_obs_data.csv')
+        benign_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/benign_obs_data.csv')
         adv_dataset_df = pd.DataFrame(adv_dataset)
-        adv_dataset_df.to_csv('./adversarial_obs_data.csv')
+        adv_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/adversarial_obs_data.csv')
         print('Dataset Saved!')
         print('###############')
 
