@@ -23,10 +23,11 @@ from ddiffpg.utils.common import Tracker, preprocess_cfg
 from ddiffpg.utils.plot_util import plot_traj
 
 from art.defences.preprocessor import PixelDefend 
+from gymnasium.vector import VectorEnvWrapper
+from gymnasium import ObservationWrapper
 
-    
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -34,13 +35,23 @@ def main(cfg: DictConfig, generate_dataset=True):
     
     if 'antmaze' in cfg.env.name:
         env = gym.make(cfg.env.name, reward_type=cfg.env.reward_type, random_init=cfg.env.random_init)
+
         episode_len = env._max_episode_steps
         env_kwargs = env.env.env.spec.kwargs
         cfg.env.env_kwargs = env_kwargs
         env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.num_envs, random_init=cfg.env.random_init)
         env = D4RLEnvWrapper(env, episode_len)
+        #Here we wrap the env to include our defense method in training
+        if(defence_method is not None):
+            #env = DefenceObsWrapper(env,defence_method)
+            pass
+
         eval_env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.eval_num_envs, random_init=cfg.env.random_init)
         eval_env = D4RLEnvWrapper(eval_env, episode_len)
+        #Here we wrap the env to include our defense method in training
+        if(defence_method is not None):
+            #eval_env = DefenceObsWrapper(eval_env,defence_method)
+            pass
     else:
         env = gymnasium.vector.make(cfg.env.name, control_type='joints', num_envs=cfg.num_envs)
         env = PybulletEnvWrapper(env)
@@ -108,9 +119,10 @@ def main(cfg: DictConfig, generate_dataset=True):
                 if(generate_dataset == True):
                     #Hold onto the perturbed sample as well
                     dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
-                else:
+                
+                #if(defence_method is not None)
                     ######## Defence purification ##########
-                    obs = defender(obs,defence='Gaussian')
+                    #obs = defender(obs,defence='Gaussian')
 
                 #########################################
 
@@ -232,7 +244,7 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None) :
     
     return perturbed_out.detach()
 
-
+'''
 def defender(adv_input, defence=None):
 
     if(defence == 'PixelDefend'):
@@ -246,7 +258,67 @@ def defender(adv_input, defence=None):
 
     
     return purified_input
+'''
+def defender(defence=None):
+
+    if(defence == None):
+        def no_defend(obs):
+            return obs
+        return no_defend
+
+    if(defence == 'Gaussian'):
+        def gaussian_defend(obs):
+            scaling_factor = 0.005
+            obs = obs + (torch.randn_like(adv_input) * scaling_factor)
+            return obs
+        return gaussian_defend
 
 
+class DefenceObsWrapper(ObservationWrapper):
+    def __init__(self, env, defence_method):
+        super().__init__(env)
+        self.defence_func = defender(defence_method)
+
+    def observation(self, obs):
+        return self.defence_func(obs)
+'''
+class DefenceObsWrapper(VectorEnvWrapper):
+    def __init__(self, env, defence_method):
+        super().__init__(env)
+        self.defence_func = defender(defence_method)
+        # Optionally, modify the observation space if your transformation changes it
+        self.observation_space = env.observation_space  # Or define a new one
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        return self.observation(obs), info
+
+    def step(self, actions):
+        obs, rewards, terminateds, truncateds, infos = self.env.step(actions)
+        return self.observation(obs), rewards, terminateds, truncateds, infos
+
+    def observation(self, obs):
+        # Modify each observation in the batch
+        return self.defence_func(obs)
+'''
+'''
+class GymToGymnasiumWrapper(gymnasium.Env):
+    def __init__(self, env, defence_method):
+        self.env = env
+        self.observation_space = env.observation_space
+        self.action_space = env.action_space        
+        self.defence_func = defender(defence_method)
+        
+    def reset(self, seed=None, options=None):
+        obs = self.env.reset()
+        return obs # Gymnasium expects a tuple
+
+    def step(self, action):
+        obs, reward, done, _, info = self.env.step(action)
+        return obs, reward, done, False, info
+
+    def render(self):
+        return self.env.render()
+'''
 if __name__ == '__main__':
     main()
