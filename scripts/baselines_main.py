@@ -27,7 +27,7 @@ from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',train_on_defense=False,target_modality=None):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -43,7 +43,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
         env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.num_envs, random_init=cfg.env.random_init)
         print('CURRENT ENV TYPE: ', type(env))
         #Here we wrap the env to include our defense method in training
-        if(defence_method is not None):
+        if(defence_method is not None) and (train_on_defense == True):
             env = DefenceObsWrapper(env, episode_len, defence_method)
         else:
             env = D4RLEnvWrapper(env, episode_len)
@@ -118,7 +118,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
                 
                 #we don't apply the adversarial perturbation when collecting data, as not to disrupt the agent
                 else:
-                    obs = adversary(agent,obs)
+                    obs = adversary(agent,obs,target_modality=target_modality)
 
                 #Repeat data collection steps on adversarial data
                 if(generate_dataset == True):
@@ -217,13 +217,13 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian'):
         print('Dataset Saved!')
         print('###############')
 
-def adversary(actor, obs):
+def adversary(actor, obs, target_modality=None):
 
     #print('ACTOR: ',actor)
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality='angular')
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
 
     return obs
 
