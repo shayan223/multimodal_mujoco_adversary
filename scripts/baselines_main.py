@@ -22,12 +22,12 @@ from ddiffpg.wrappers.pybullet_wrapper import PybulletEnvWrapper
 from ddiffpg.utils.common import Tracker, preprocess_cfg
 from ddiffpg.utils.plot_util import plot_traj
 
-from art.defences.preprocessor import PixelDefend 
+#from art.defences.preprocessor import PixelDefend 
 from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',train_on_defense=False,target_modality=None):
+def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train_on_defense=True,target_modality=None):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -114,7 +114,7 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',trai
                     #hold on to the benign observation for the dataset
                     buffer_obs = obs.clone()#.detach().cpu().numpy()
                     buffer_list = [row.detach().cpu().numpy() for row in buffer_obs]
-                    dataset_buffer.extend(buffer_obs)
+                    dataset_buffer.extend(buffer_list)
                 
                 #we don't apply the adversarial perturbation when collecting data, as not to disrupt the agent
                 else:
