@@ -27,7 +27,7 @@ from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train_on_defense=True,target_modality=None):
+def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train_on_defense=False,target_modality=None):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
