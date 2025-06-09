@@ -145,3 +145,5 @@ outputs/
 # wandb files
 wandb/
 sweep/
+
+*.csv
