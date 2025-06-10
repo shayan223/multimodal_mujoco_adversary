@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+import torchvision.models as models
 
 class adv_obs_dataset(Dataset):
     def __init__(self, csv_benign, csv_adversarial, transform=None, dtype=torch.float32):
@@ -117,10 +118,22 @@ def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
     val_loader = DataLoader(val_subset, batch_size=batch_size)
 
     # Model, loss, optimizer
-    model = adv_detector_nn(input_dim)
+    #model = adv_detector_nn(input_dim)
+
+    ############################################################
+    ##### Use this code for pre-trained resnet classifier ######
+    # Load the pretrained ResNet-34 model
+    model = models.resnet34(pretrained=True)
+    # Get the number of input features for the last layer
+    num_ftrs = model.fc.in_features
+    # Replace the last fully connected layer with a new one
+    # that has 10 output classes
+    model.fc = nn.Linear(num_ftrs, 1)
+    ############################################################
+
     criterion = nn.BCELoss()  # Since output is sigmoid
-    #optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    #optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     # Training loop
     for epoch in range(epochs):
