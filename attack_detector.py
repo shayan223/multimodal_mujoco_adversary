@@ -102,6 +102,31 @@ class adv_detector_nn(nn.Module):
         return x
 
 
+
+class ResNet1D(nn.Module):
+    def __init__(self, base_model, input_dim, output_dim):
+        super().__init__()
+        self.input_dim = input_dim
+
+        # Replace conv1 with a 1D-compatible layer
+        self.conv1 = nn.Conv1d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+        # Keep rest of the resnet body
+        self.resnet = base_model
+        self.resnet.conv1 = self.conv1
+        self.resnet.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+        
+        # Adjust the avgpool to 1D
+        self.resnet.avgpool = nn.AdaptiveAvgPool1d(1)
+        
+        # Change final fully connected layer
+        self.resnet.fc = nn.Linear(512, output_dim)
+
+    def forward(self, x):
+        # Assume x shape is [B, input_dim]
+        x = x.unsqueeze(1)  # [B, 1, input_dim]
+        return self.resnet(x)
+
 def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
 
     full_dataset = adv_obs_dataset("benign_obs_data.csv", "adversarial_obs_data.csv")
@@ -123,12 +148,8 @@ def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
     ############################################################
     ##### Use this code for pre-trained resnet classifier ######
     # Load the pretrained ResNet-34 model
-    model = models.resnet34(pretrained=True)
-    # Get the number of input features for the last layer
-    num_ftrs = model.fc.in_features
-    # Replace the last fully connected layer with a new one
-    # that has 10 output classes
-    model.fc = nn.Linear(num_ftrs, 1)
+    base_model = models.resnet34(pretrained=True)
+    model = ResNet1D(base_model, input_dim=input_dim, output_dim=1)
     ############################################################
 
     criterion = nn.BCELoss()  # Since output is sigmoid
