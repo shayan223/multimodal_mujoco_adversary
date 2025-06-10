@@ -61,16 +61,17 @@ class adv_obs_dataset(Dataset):
 class adv_detector_nn(nn.Module):
     def __init__(self, input_dim, hidden_dim=64, dropout_rate=0.3):
         super(adv_detector_nn, self).__init__()
-        # Layer 1
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.bn1 = nn.BatchNorm1d(128)
+        # Layer 1        
+        self.input_bn = nn.BatchNorm1d(input_dim)
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.bn1 = nn.BatchNorm1d(256)
 
         # Layer 2
-        self.fc2 = nn.Linear(128, 64)
-        self.bn2 = nn.BatchNorm1d(64)
+        self.fc2 = nn.Linear(256, 128)
+        self.bn2 = nn.BatchNorm1d(128)
 
         # Layer 3
-        self.fc3 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(128, 32)
         self.bn3 = nn.BatchNorm1d(32)
 
         # Output layer
@@ -79,20 +80,21 @@ class adv_detector_nn(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x):
+        x = self.input_bn(x)
         x = self.fc1(x)
-        x = self.bn1(x)
+        #x = self.bn1(x)
         x = F.relu(x)
-        x = self.dropout(x)
+        #x = self.dropout(x)
 
         x = self.fc2(x)
-        x = self.bn2(x)
+        #x = self.bn2(x)
         x = F.relu(x)
-        x = self.dropout(x)
+        #x = self.dropout(x)
 
         x = self.fc3(x)
-        x = self.bn3(x)
+        #x = self.bn3(x)
         x = F.relu(x)
-        x = self.dropout(x)
+        #x = self.dropout(x)
 
         x = self.output(x)
         x = torch.sigmoid(x)  # Or remove this if using BCEWithLogitsLoss
@@ -117,7 +119,7 @@ def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
     # Model, loss, optimizer
     model = adv_detector_nn(input_dim)
     criterion = nn.BCELoss()  # Since output is sigmoid
-    #optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     # Training loop

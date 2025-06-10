@@ -1,4 +1,49 @@
 
+import torch
+import pandas as pd
+import numpy as np
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+import torch.nn as nn
+import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
+from tqdm import tqdm
+
+class VAE_adv_obs_dataset(Dataset):
+    def __init__(self, benign_csv, adv_csv, transform=None, dtype=torch.float32):
+        """
+        Args:
+            benign_csv (str): CSV path for data used as labels (and inputs).
+            adv_csv (str): CSV path for data used as inputs.
+        """
+        self.benign = pd.read_csv(benign_csv).values.astype(np.float32)
+        self.adv = pd.read_csv(adv_csv).values.astype(np.float32)
+
+        assert self.benign.shape == self.adv.shape, "Both files must have the same shape"
+
+        self.dtype = dtype
+        self.N = len(self.benign)
+        self.transform = transform
+
+        # Create self-pairs and cross-pairs
+        # Total dataset: 2N entries
+        self.data = np.concatenate([self.data1, self.data2], axis=0)
+        self.labels = np.concatenate([self.data1, self.data1], axis=0)  # file1 is always the label
+
+    def __len__(self):
+        return 2 * self.N
+
+    def __getitem__(self, idx):
+        x = self.data[idx]
+        y = self.labels[idx]
+
+        if self.transform:
+            x = self.transform(x)
+
+        x = torch.tensor(x, dtype=self.dtype)
+        y = torch.tensor(y, dtype=self.dtype)
+        return x, y
+
 """
 A Convolutional Variational Autoencoder, made to match that in the Defence-VAE paper: https://github.com/lxuniverse/defense-vae/blob/master/black_box/vae_models.py
 """
@@ -102,13 +147,26 @@ def train_vae_mnist(EPOCHS=10):
     Create dataloaders to feed data into the neural network
     Default MNIST dataset is used and standard train/test split is performed
     """
+    '''
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('data', train=True, download=True,
                         transform=transforms.ToTensor()),
         batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST('data', train=False, transform=transforms.ToTensor()),
-        batch_size=1)
+        batch_size=1)'''
+    # Split into train and validation
+    dataset = VAE_adv_obs_dataset('benign_obs_data.csv','adversarial_obs_data.csv')
+    val_fraction = 0.2
+    val_size = int(len(dataset) * val_fraction)
+    train_size = len(dataset) - val_size
+
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    # Create dataloaders
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, transforms=transforms.ToTensor())
+    test_loader = DataLoader(val_dataset, batch_size=32, transforms=transforms.ToTensor())
+
 
     """
     Initialize the network and the Adam optimizer
@@ -122,10 +180,15 @@ def train_vae_mnist(EPOCHS=10):
     Training the network for a given number of epochs
     The loss after every epoch is printed
     """
-    for epoch in range(num_epochs + 5):
-        for idx, data in enumerate(train_loader, 0):
-            imgs, _ = data
+    KL_losses = []
+    Recon_losses = []
+    for epoch in range(num_epochs):
+        avg_batch_KL = []
+        avg_batch_recon = []
+        for idx, data in tqdm(enumerate(train_loader, 0)):
+            imgs, benign_imgs = data
             imgs = imgs.to(device)
+            benign_imgs = benign_imgs.to(device)
 
             # Feeding a batch of images into the network to obtain the output image, mu, and logVar
             out, mu, logVar = net(imgs)
@@ -133,21 +196,29 @@ def train_vae_mnist(EPOCHS=10):
             # The loss is the BCE loss combined with the KL divergence to ensure the distribution is learnt
             #kl_divergence = -0.5 * torch.sum(1 + logVar - mu.pow(2) - logVar.exp())
             #loss = F.binary_cross_entropy(out, imgs, size_average=False) + kl_divergence
-            loss, bce, kld = net.loss(out,imgs,mu,logVar)
+            loss, bce, kld = net.loss(out,benign_imgs,mu,logVar)
+
+            #Record batch loss  
+            avg_batch_recon.append(torch.mean(bce).item())
+            avg_batch_KL.append(torch.mean(kld).item())
 
             # Backpropagation based on the loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        print('Epoch {}: Loss {}'.format(epoch, loss))
+        #Record average losses for epoch
+        KL_losses.append(sum(avg_batch_KL)/len(avg_batch_KL))
+        Recon_losses.append(sum(avg_batch_recon)/len(avg_batch_recon))
 
+        print('Epoch {}: Loss {}'.format(epoch, loss))
 
 
     """
     The following part takes a random image from test loader to feed into the VAE.
     Both the original image and generated image from the distribution are shown.
     """
+    '''
     sample_count = 10
     image_count = 1
     net.eval()
@@ -165,9 +236,9 @@ def train_vae_mnist(EPOCHS=10):
             plt.savefig('../../results/vae_examples/vae_examples'+str(image_count)+'.png')
             plt.clf()
             image_count += 1
-
+    '''
 
     # Save model parameters
-    torch.save(net.state_dict(), '../../model_parameters/basic_vae_model_mnist.pth')
+    torch.save(net.state_dict(), './defence_vae.pth')
 
 

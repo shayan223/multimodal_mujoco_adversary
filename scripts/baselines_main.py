@@ -154,7 +154,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
 
             #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
             if(generate_dataset == True):
-                if(ret_mean > 0):
+                if(global_steps > 1.5e6):  #if(ret_mean > 0):
                     print("Sucessfull episode, saving data!")
                     #extend dataset to include new values, rather than nesting lists
                     benign_dataset.extend(dataset_buffer)
