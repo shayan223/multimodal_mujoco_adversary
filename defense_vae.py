@@ -215,7 +215,7 @@ def train_vae_mnist(EPOCHS=10):
     for epoch in range(num_epochs):
         avg_batch_KL = []
         avg_batch_recon = []
-        for idx, data in tqdm(enumerate(train_loader, 0)):
+        for data in tqdm(train_loader):
             imgs, benign_imgs = data
             imgs = imgs.unsqueeze(1).to(device)
             benign_imgs = benign_imgs.unsqueeze(1).to(device)
