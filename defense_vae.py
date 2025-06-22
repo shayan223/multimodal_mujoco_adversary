@@ -61,6 +61,15 @@ class VAE_adv_obs_dataset(Dataset):
 
         x = torch.tensor(x, dtype=self.dtype)
         y = torch.tensor(y, dtype=self.dtype)
+
+        # Pad to 36 elements, then reshape to 6x6
+        if x.numel() < 36:
+            x = torch.nn.functional.pad(x, (0, 36 - x.numel()))
+        x = x.view(6, 6)
+        if y.numel() < 36:
+            y = torch.nn.functional.pad(y, (0, 36 - y.numel()))
+        y = y.view(6, 6)
+
         return x, y
 
 """
@@ -157,6 +166,90 @@ class VAE(nn.Module):
         BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         return BCE + KLD, BCE, KLD
+    
+
+class VAE_3d(nn.Module):
+    def __init__(self, imgChannels=1, featureDim=1028, zDim=128):
+        super(VAE_3d, self).__init__()
+        self.encoding_dim = zDim
+        # Vae model made to match that in the Defence-VAE code base
+        # Encoder
+        self.encConv1 = nn.Conv2d(1, 64, kernel_size=5, stride=1, padding=2, bias= False)
+        self.encConv1_bn = nn.BatchNorm2d(64)
+        self.encConv2 = nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=3, bias= False)
+        self.encConv2_bn = nn.BatchNorm2d(64)
+        self.encConv3 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias= False)
+        self.encConv3_bn = nn.BatchNorm2d(128)
+        self.encConv4 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias= False)
+        self.encConv4_bn = nn.BatchNorm2d(256)
+        # Latent space
+        self.mu_layer = nn.Linear(256, featureDim)
+        self.logvar_layer = nn.Linear(256, featureDim)
+
+        # Decoder
+        self.fc3 = nn.Linear(featureDim, 256)
+        self.fc3_bn = nn.BatchNorm1d(256)
+        self.deconv1 = nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1, bias= False)
+        self.deconv1_bn = nn.BatchNorm2d(128)
+        self.deconv2 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, bias= False)
+        self.deconv2_bn = nn.BatchNorm2d(64)
+        self.deconv3 = nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=3, bias= False)
+        self.deconv3_bn = nn.BatchNorm2d(64)
+        self.deconv4 = nn.ConvTranspose2d(64, 1, kernel_size=3, stride=1, padding=0, bias=False)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+
+    def encoder(self, x):
+        out = self.relu(self.encConv1_bn(self.encConv1(x)))
+        out = self.relu(self.encConv2_bn(self.encConv2(out)))
+        out = self.relu(self.encConv3_bn(self.encConv3(out)))
+        out = self.relu(self.encConv4_bn(self.encConv4(out)))
+        h1 = out.view(out.size(0), -1)
+
+        # mu and logVar respectively
+        mu = self.mu_layer(h1)
+
+        logvar = self.logvar_layer(h1)
+
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def decoder(self, z):
+
+        # z is fed back into a fully-connected layers and then into transpose convolutional layers
+        # The generated output is the same size of the original input
+        h3 = self.relu(self.fc3(z))
+        out = h3.view(h3.size(0), 256, 1, 1)
+        out = self.relu(self.deconv1_bn(self.deconv1(out)))
+        out = self.relu(self.deconv2_bn(self.deconv2(out)))
+        out = self.relu(self.deconv3_bn(self.deconv3(out)))
+        out = self.sigmoid(self.deconv4(out))
+        return out
+
+    def forward(self, x):
+
+        # The entire pipeline of the VAE: encoder -> reparameterization -> decoder
+        # output, mu, and logVar are returned for loss computation
+        mu, logvar = self.encoder(x)
+        z = self.reparameterize(mu, logvar)
+        decoded_z = self.decoder(z)
+
+        return decoded_z, mu, logvar
+    
+    def loss(self, recon_x, x, mu, logvar):
+        
+        BCE = F.smooth_l1_loss(recon_x, x, reduction='sum')#F.binary_cross_entropy(recon_x, x, size_average=False)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return BCE + KLD, BCE, KLD
+    
+
 
 def train_vae_mnist(EPOCHS=10):
     """
@@ -201,7 +294,7 @@ def train_vae_mnist(EPOCHS=10):
     """
     Initialize the network and the Adam optimizer
     """
-    net = VAE().to(device)
+    net = VAE_3d().to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
 
@@ -228,7 +321,7 @@ def train_vae_mnist(EPOCHS=10):
             #loss = F.binary_cross_entropy(out, imgs, size_average=False) + kl_divergence
             #print('Min/max recon_x:', out.min(), out.max())
             #print('Min/max x:', benign_imgs.min(), benign_imgs.max())
-            loss, bce, kld = net.loss(out,dataset.normalize(benign_imgs),mu,logVar)
+            loss, bce, kld = net.loss(out,benign_imgs,mu,logVar)#dataset.normalize(benign_imgs),mu,logVar)
 
             #Record batch loss  
             avg_batch_recon.append(torch.mean(bce).item())

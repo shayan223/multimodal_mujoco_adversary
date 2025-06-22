@@ -134,7 +134,6 @@ dmypy.json
 *.pkl
 **/log/**
 *.pt
-*.pth
 *.json
 **/tmp/**
 *.idea/
