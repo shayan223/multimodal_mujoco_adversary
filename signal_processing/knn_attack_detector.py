@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
+from sklearn import preprocessing
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -47,13 +48,15 @@ def pca_transform(df, n_components):
 
 def main():
     combined_df = sample_and_combine(5000)
+    print("Sampled and combined data shape:", combined_df.shape)
 
-    # Create Train and Test Samples
+# Create Train and Test Samples
     X = combined_df.drop(columns = 'adversarial', axis=1)
+    X = pd.DataFrame(preprocessing.normalize(X), columns=X.columns)  # Normalize the data
     y = combined_df['adversarial']
 
     X_train, X_test, y_train, y_test = train_test_split(X,y,test_size = 0.33, random_state=1234)
-
+    print("Created Train and Test Samples and Normalized Features.")
     # Train and evaluate for k values 1-20
     print("Training KNN Classifier with k values from 1 to 20...")
     acc_scores = []
@@ -75,6 +78,7 @@ def main():
     print(classification_report(y_test, label_predictions))
 
     # Use PCA to reduce to 2 components
+    print("Applying PCA to reduce to 2 components...")
     n_components = 2       
     X_train = pca_transform(X_train, n_components=n_components)
     X_test = pca_transform(X_test, n_components=n_components)
@@ -96,6 +100,61 @@ def main():
     model.fit(X_train, y_train)     
     label_predictions = model.predict(X_test)   
     print(classification_report(y_test, label_predictions)) 
+
+
+### Uncomment to run the code below for MinMaxScaler and PCA transformations
+    # # Instantiate MinMaxScaler -- scale features between 0 and 1
+    # scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    # # Scale the data
+    # # Create Train and Test Samples
+    # X = combined_df.drop(columns = 'adversarial', axis=1)
+    # X = pd.DataFrame(scaler.fit_transform(X), columns=X.columns)
+    # y = combined_df['adversarial']
+
+    # X_train, X_test, y_train, y_test = train_test_split(X,y,test_size = 0.33, random_state=1234)
+
+    # # Train and evaluate for k values 1-20
+    # print("Training KNN Classifier with k values from 1 to 20...")
+    # acc_scores = []
+    # k_values = range(1,22)
+    # for i in k_values:
+    #     score = train_test_knn(X_train, X_test, y_train, y_test,i)
+    #     acc_scores.append(score)
+
+    # # Find optimal k value
+    # optimal_k = acc_scores.index(max(acc_scores))+1  # k value with highest accuracy score
+    # print(f'Optimal k value: {optimal_k} with accuracy score: {max(acc_scores)}')
+
+    # # Fit model with optimal k value and return classification report
+    # print("Fitting KNN Classifier with optimal k value...")
+    # model = KNeighborsClassifier(n_neighbors = optimal_k, algorithm = 'kd_tree')
+    # model.fit(X_train, y_train)
+    # label_predictions = model.predict(X_test)
+
+    # print(classification_report(y_test, label_predictions))
+
+    # # Use PCA to reduce to 2 components
+    # n_components = 2       
+    # X_train = pca_transform(X_train, n_components=n_components)
+    # X_test = pca_transform(X_test, n_components=n_components)
+
+    # # Train and evaluate for k values 1-20
+    # print("Training KNN Classifier with k values from 1 to 20...")
+    # acc_scores = []
+    # k_values = range(1,22)
+    # for i in k_values:
+    #     score = train_test_knn(X_train, X_test, y_train, y_test,i)
+    #     acc_scores.append(score)
+    
+    # optimal_k = acc_scores.index(max(acc_scores))+1  # k value with highest accuracy score
+    # print(f'Optimal k value: {optimal_k} with accuracy score: {max(acc_scores)}')
+
+    # # Fit model with optimal k value and return classification report
+    # print("Fitting KNN Classifier with optimal k value...")
+    # model = KNeighborsClassifier(n_neighbors = optimal_k, algorithm = 'kd_tree')
+    # model.fit(X_train, y_train)     
+    # label_predictions = model.predict(X_test)   
+    # print(classification_report(y_test, label_predictions)) 
 
 if __name__ == "__main__":
     main()

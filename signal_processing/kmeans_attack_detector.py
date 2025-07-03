@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 
-from sklearn.preprocessing import StandardScaler
+from sklearn import preprocessing
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
@@ -56,16 +56,47 @@ def LDA_transform(df, n_components):
     transformed_data = pd.DataFrame(lda.fit_transform(df.drop(columns=['adversarial'], axis = 1), df['adversarial']))
     return transformed_data
 
+def MinMaxScale(df):
+    # Instantiate MinMaxScaler -- scale features between 0 and 1
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+
+    # Separate features and labels
+    features = df.drop(columns=['adversarial'])
+    labels = df['adversarial']
+
+    # Normalize features
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    features_scaled = pd.DataFrame(scaler.fit_transform(features), columns=features.columns)
+
+    # Concatenate labels back
+    scaled_df = pd.concat([features_scaled, labels.reset_index(drop=True)], axis=1)
+
+    return scaled_df
 
 def main():
+    # Sample and Combine Data
     combined_df = sample_and_combine(5000)
     print(f'Combined Dataframe Shape: {combined_df.shape}')
 
+    # Scales Data between 0 and 1
+    #combined_df = MinMaxScale(combined_df)
+
+    # Scales rows to unit norm
+    labels = combined_df['adversarial']
+    d = preprocessing.normalize(combined_df.drop(columns=['adversarial'], axis=1), norm='l2')
+    scaled_df = pd.DataFrame(d, columns=combined_df.drop(columns=['adversarial'], axis=1).columns)
+     # Concatenate labels back
+    combined_df = pd.concat([scaled_df, labels.reset_index(drop=True)], axis=1)
+
+    # Fit Initial KMeans Model 
+    s_score, clusters, centroids = fit_kmeans(combined_df)
+    print(f'silhouette score: {s_score}')
+
     # Reduce to 2 components using PCA
     n_components = 2
-    pca_transformed_data = pca_transform(combined_df.drop(columns=['adversarial']), n_components=n_components)
+    pca_transformed_data = pca_transform(combined_df.drop(columns=['adversarial'], axis=1), n_components=n_components)
     
-    # Fit Initial KMeans Model -- No Transformations
+    # Fit Initial KMeans Model -- Transformed
     s_score, clusters, centroids = fit_kmeans(pca_transformed_data)
     print(f'silhouette score ({n_components} components): {s_score}')
     
@@ -80,9 +111,9 @@ def main():
 
     # Reduce to 3 components using PCA
     n_components = 3
-    pca_transformed_data = pca_transform(combined_df.drop(columns=['adversarial']), n_components=n_components)
+    pca_transformed_data = pca_transform(combined_df.drop(columns=['adversarial'], axis=1), n_components=n_components)
     
-    # Fit Initial KMeans Model -- No Transformations
+    # Fit Initial KMeans Model -- Transformed
     s_score, clusters, centroids = fit_kmeans(pca_transformed_data)
     print(f'silhouette score ({n_components} components): {s_score}')
 
