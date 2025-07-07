@@ -120,6 +120,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
                 if(generate_dataset == True):
                     #Seperate standard observation from the perturbed one for data collection
                     adv_obs = adversary(agent,obs,target_modality=target_modality)
+                    
                 else:
                     obs = adversary(agent,obs,target_modality=target_modality)
 
@@ -127,7 +128,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
                 if(generate_dataset == True):
                     #Hold onto the perturbed sample as well
                     #dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
-                    buffer_obs = adv_obs.clone()#.detach().cpu().numpy()
+                    buffer_obs = obs.clone()#.detach().cpu().numpy()
                     buffer_list = [row.detach().cpu().numpy() for row in buffer_obs]
                     dataset_adv_buffer.extend(buffer_list)
                 
@@ -145,7 +146,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
                 next_obs, reward, done, info = eval_env.step(action)
                 current_returns += reward
                 current_lengths += 1
-                traj_states.append(obs[:, :2].cpu().numpy())
+                traj_states.append(obs[:, :2].detach().cpu().numpy())
                 env_done_indices = torch.where(done)[0]
                 return_tracker.update(current_returns[env_done_indices])
                 step_tracker.update(current_lengths[env_done_indices])
@@ -256,7 +257,7 @@ def fgsm_attack(model, input_vals, eps=0.007, target_modality=None,outputs=None)
         perturbed_out = input_vals + eps*input_vals.grad.sign()
 
     
-    return perturbed_out.detach()
+    return perturbed_out#.detach()
 
 '''
 def defender(adv_input, defence=None):
