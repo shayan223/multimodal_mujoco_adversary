@@ -143,13 +143,13 @@ def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
     val_loader = DataLoader(val_subset, batch_size=batch_size)
 
     # Model, loss, optimizer
-    #model = adv_detector_nn(input_dim)
+    model = adv_detector_nn(input_dim)
 
     ############################################################
     ##### Use this code for pre-trained resnet classifier ######
     # Load the pretrained ResNet-34 model
-    base_model = models.resnet34(pretrained=True)
-    model = ResNet1D(base_model, input_dim=input_dim, output_dim=1)
+    #base_model = models.resnet34(pretrained=True)
+    #model = ResNet1D(base_model, input_dim=input_dim, output_dim=1)
     ############################################################
 
     criterion = nn.BCELoss()  # Since output is sigmoid

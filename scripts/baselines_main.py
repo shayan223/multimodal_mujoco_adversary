@@ -128,7 +128,7 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
                 if(generate_dataset == True):
                     #Hold onto the perturbed sample as well
                     #dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
-                    buffer_obs = obs.clone()#.detach().cpu().numpy()
+                    buffer_obs = adv_obs.clone()#.detach().cpu().numpy()
                     buffer_list = [row.detach().cpu().numpy() for row in buffer_obs]
                     dataset_adv_buffer.extend(buffer_list)
                 
