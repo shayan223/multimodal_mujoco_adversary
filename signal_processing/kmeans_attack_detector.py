@@ -1,161 +1,108 @@
 import pandas as pd
 import numpy as np
 import os
-
-from sklearn import preprocessing
+from sklearn.preprocessing import normalize, MinMaxScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-
+from sklearn.metrics import accuracy_score
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-# Take n random samples from each dataframe, join them, and standardize the data
-def sample_and_combine(n_samples):
-    #Read in Adversarial Dataset
-    adv_file = os.path.join(os.getcwd(), "signal_processing", "data", "adversarial_obs_data.csv")
-    adversarial_df = pd.read_csv(adv_file, header=0)
-
-    #Read in Benign Dataset
-    ben_file = os.path.join(os.getcwd(), "signal_processing", "data", "benign_obs_data.csv")
-    benign_df = pd.read_csv(ben_file, header=0)
-
-    # Drop the 'Unamed 0' Column 
-    adversarial_df.drop(columns = 'Unnamed: 0', axis = 1, inplace = True)
-    benign_df.drop(columns = 'Unnamed: 0', axis = 1, inplace = True)
-
-    # Add Labels
-    adversarial_df['adversarial'] = 1
-    benign_df['adversarial'] = 0
-
-    # Sample Observations and Create Joined Dataframe
-    adversarial_sampled = adversarial_df.sample(n=n_samples, random_state=4321)
-    benign_sampled = benign_df.sample(n=n_samples, random_state=2341)
-    combined_df = pd.concat([adversarial_sampled,benign_sampled])
-
-    return combined_df
 
 # Fit model, return silhouette score, labels, centroids
 def fit_kmeans(df):
     model = KMeans(n_clusters = 2, random_state = 123)
-    assigned_clusters = model.fit_predict(df)
+    clusters = model.fit_predict(df)
     centroids = model.cluster_centers_
     
-    s_score = silhouette_score(df,assigned_clusters) 
+    s_score = silhouette_score(df, clusters) 
     
-    return s_score, assigned_clusters, centroids
+    return s_score,clusters,centroids
 
-def pca_transform(df, n_components):
-    pca = PCA(n_components=n_components)
-    transformed_data = pd.DataFrame(pca.fit_transform(df))
+def pca_transform_features(n_comp, features):
+    pca = PCA(n_components=n_comp)
+    transformed_features = pd.DataFrame(pca.fit_transform(features))
+    return transformed_features
+
+def LDA_transform_features(n_comp, features, label):
+    lda = LinearDiscriminantAnalysis(n_components=n_comp)
+    transformed_data = pd.DataFrame(lda.fit_transform(features,label))
     return transformed_data
-
-def LDA_transform(df, n_components):
-    lda = LinearDiscriminantAnalysis(n_components=n_components)
-    transformed_data = pd.DataFrame(lda.fit_transform(df.drop(columns=['adversarial'], axis = 1), df['adversarial']))
-    return transformed_data
-
-def MinMaxScale(df):
-    # Instantiate MinMaxScaler -- scale features between 0 and 1
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-
-    # Separate features and labels
-    features = df.drop(columns=['adversarial'])
-    labels = df['adversarial']
-
-    # Normalize features
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    features_scaled = pd.DataFrame(scaler.fit_transform(features), columns=features.columns)
-
-    # Concatenate labels back
-    scaled_df = pd.concat([features_scaled, labels.reset_index(drop=True)], axis=1)
-
-    return scaled_df
 
 def main():
-    # Sample and Combine Data
-    combined_df = sample_and_combine(5000)
-    print(f'Combined Dataframe Shape: {combined_df.shape}')
+    # Read in data 
+    filename = os.path.join(os.getcwd(), "signal_processing", "data", "combined_sample_2.csv")
+    df = pd.read_csv(filename)
+    df = df.drop(columns='Unnamed: 0')
 
-    # Scales Data between 0 and 1
-    #combined_df = MinMaxScale(combined_df)
+    # Split into features and label
+    X = df.drop(columns='adversarial')
+    y = df['adversarial']
 
-    # Scales rows to unit norm
-    labels = combined_df['adversarial']
-    d = preprocessing.normalize(combined_df.drop(columns=['adversarial'], axis=1), norm='l2')
-    scaled_df = pd.DataFrame(d, columns=combined_df.drop(columns=['adversarial'], axis=1).columns)
-     # Concatenate labels back
-    combined_df = pd.concat([scaled_df, labels.reset_index(drop=True)], axis=1)
+    # Feature transformations
+    # Normalization Methods
+    # X = pd.DataFrame(normalize(X))
+    X = pd.DataFrame(MinMaxScaler().fit_transform(X))
+    # PCA 
+    # X = pca_transform_features(n_comp=3, features=X)
+    # LDA 
+    X = LDA_transform_features(n_comp=1, features=X, label=y)
 
-    # Fit Initial KMeans Model 
-    s_score, clusters, centroids = fit_kmeans(combined_df)
-    print(f'silhouette score: {s_score}')
 
-    # Reduce to 2 components using PCA
-    n_components = 2
-    pca_transformed_data = pca_transform(combined_df.drop(columns=['adversarial'], axis=1), n_components=n_components)
-    
-    # Fit Initial KMeans Model -- Transformed
-    s_score, clusters, centroids = fit_kmeans(pca_transformed_data)
-    print(f'silhouette score ({n_components} components): {s_score}')
-    
-    # Visualize -- 2d
-    pca_transformed_data['clusters'] = clusters
-    ax = sns.scatterplot(data=pca_transformed_data, x=0, y=1, hue='clusters')
-    sns.scatterplot(x=centroids[:,0], y=centroids[:,1], color = 'k')
-    ax.set(xlabel='Component 0', 
-           ylabel='Component 1',
-           title = f'KMeans Clustering with PCA (2 Components) \nSilhouette Score: {round(s_score, 4)}')
-    plt.show()
+    # Fit KMeans Model 
+    s_score, clusters, centroids = fit_kmeans(X)
+    print(f'Silhouette score: {s_score}')
 
-    # Reduce to 3 components using PCA
-    n_components = 3
-    pca_transformed_data = pca_transform(combined_df.drop(columns=['adversarial'], axis=1), n_components=n_components)
-    
-    # Fit Initial KMeans Model -- Transformed
-    s_score, clusters, centroids = fit_kmeans(pca_transformed_data)
-    print(f'silhouette score ({n_components} components): {s_score}')
+    # Calculate clustering accuracy
+    acc_score = accuracy_score(y, clusters)
+    print(f'Accuracy Score: {acc_score:.2%}')
 
-    # Visualize -- 3d
-    pca_transformed_data['clusters'] = clusters
-    x1 = pca_transformed_data[0]
-    x2 = pca_transformed_data[1]
-    x3 = pca_transformed_data[2]
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    # Add transformed features, true labels, and predicted labels to df
+    plot_df = pd.concat([X,y], axis=1)
+    plot_df['clusters'] = clusters
 
-    # Plot each cluster separately with a label
-    for cluster_id in np.unique(clusters):
-        idx = clusters == cluster_id
-        ax.scatter(
-            x1[idx], x2[idx], x3[idx],
-            marker='o', s=5,
-            label=f'Cluster {cluster_id}'
-        )
+    # # Visualize -- 2d
+    # ax = sns.scatterplot(data=plot_df, x=0, y=1, hue='clusters', style='adversarial')
+    # sns.scatterplot(x=centroids[:,0], y=centroids[:,1], color = 'k')
+    # ax.set(xlabel='Component 0', 
+    #        ylabel='Component 1',
+    #        title = f'KMeans Clustering with PCA (2 Components) \nSilhouette Score: {round(s_score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
+    # plt.show()
 
-    # Add centroids
-    ax.scatter(
-        centroids[:,0], centroids[:,1], centroids[:,2],
-        color='k', marker='x', s=100, label='Centroids'
-    )
-    ax.set_xlabel('Component 0')
-    ax.set_ylabel('Component 1')
-    ax.set_zlabel('Component 2')
-    ax.set_title(f'KMeans Clustering with PCA ({n_components} Components)\nSilhouette Score: {round(s_score, 4)}')
-    ax.legend()
-    plt.show()
+    # # Visualize -- 3d
+    # x1 = plot_df[0]
+    # x2 = plot_df[1]
+    # x3 = plot_df[2]
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
 
-    # Fit LDA Model
-    LDA_transformed_data = LDA_transform(combined_df, n_components=1) 
-    s_score, clusters, centroids = fit_kmeans(LDA_transformed_data)
-    print(f'silhouette score (LDA): {s_score}')
+    # # Plot each cluster separately with a label
+    # for cluster_id in np.unique(clusters):
+    #     idx = clusters == cluster_id
+    #     ax.scatter(
+    #         x1[idx], x2[idx], x3[idx],
+    #         marker='o', s=5,
+    #         label=f'Cluster {cluster_id}'
+    #     )
 
-    LDA_transformed_data['clusters'] = clusters
-    y_vals = [0] * LDA_transformed_data.shape[0]
-    ax = sns.scatterplot(data=LDA_transformed_data, x=0, y=y_vals, hue='clusters')
+    # # Add centroids
+    # ax.scatter(
+    #     centroids[:,0], centroids[:,1], centroids[:,2],
+    #     color='k', marker='x', s=100, label='Centroids'
+    # )
+    # ax.set_xlabel('Component 0')
+    # ax.set_ylabel('Component 1')
+    # ax.set_zlabel('Component 2')
+    # ax.set_title(f'KMeans Clustering with PCA (3 Components)\nSilhouette Score: {round(s_score, 4)} \nAccuracy Score: {round(acc_score, 4):.2%}')
+    # ax.legend()
+    # plt.show()
+
+    # Visualize
+    y_vals = [0] * plot_df.shape[0]
+    ax = sns.scatterplot(data=plot_df, x=0, y=y_vals, hue='clusters')
     plt.scatter(x=centroids[:,0], y=[[0],[0]], color = 'k')
-    ax.set(title = f'KMeans Clustering with LDA (1 Components) \nSilhouette Score: {round(s_score, 4)}')
+    ax.set(title = f'KMeans Clustering with LDA (1 Component)\nSilhouette Score: {round(s_score, 4)} \nAccuracy Score: {round(acc_score, 4):.2%}')
     plt.show()
 
 

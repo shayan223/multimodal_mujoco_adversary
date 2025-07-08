@@ -6,7 +6,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score, accuracy_score
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn import preprocessing
+from sklearn.preprocessing import normalize, MinMaxScaler
 import numpy as np
 
 
@@ -41,31 +41,64 @@ def lda_transform_features(n_comp, features, label):
     lda = LinearDiscriminantAnalysis(n_components=n_comp)
     transformed_features = pd.DataFrame(lda.fit_transform(features, label))
     return transformed_features
-
+    
 
 def main():
     # Read in data 
-    filename = os.path.join(os.getcwd(), "signal_processing", "data", "combined_sample.csv")
+    filename = os.path.join(os.getcwd(), "signal_processing", "data", "combined_sample_2.csv")
     df = pd.read_csv(filename)
     df = df.drop(columns='Unnamed: 0')
     
-    # X = pd.DataFrame(preprocessing.normalize(df.drop(columns='adversarial', axis=1)))
+    # Split into features and label
     X = df.drop(columns='adversarial', axis=1)
     y = df['adversarial']
 
+    # Feature Transformations
+    # Normalization methods
+    X = pd.DataFrame(MinMaxScaler().fit_transform(X))
+    # X = pd.DataFrame(normalize(X))
+    # PCA
     X = pca_transform_features(n_comp=2, features=X)
 
+    # Fit Model
     labels, score = fit_gmm(n_comp=2, features=X)
     
-    X['assigned clusters'] = labels
+    X['predicted clusters'] = labels
     X['true labels (adversarial = 1)'] = y
 
     acc_score = accuracy_score(y, labels)
+    print(acc_score, " ", score)
 
-    ax = sns.scatterplot(data = X, x=0, y=1, hue = 'assigned clusters', style='true labels (adversarial = 1)')
+    # # Visualize -- 3d
+    # x1 = X[0]
+    # x2 = X[1]
+    # x3 = X[2]
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+
+    # # Plot each cluster separately with a label
+    # for cluster_id in np.unique(labels):
+    #     idx = labels == cluster_id
+    #     ax.scatter(
+    #         x1[idx], x2[idx], x3[idx],
+    #         marker='o', s=5,
+    #         label=f'Cluster {cluster_id}'
+    #     )
+
+    # ax.set_xlabel('Component 0')
+    # ax.set_ylabel('Component 1')
+    # ax.set_zlabel('Component 2')
+    # ax.set_title(f'GMM Clustering with PCA (3 Components)\nSilhouette Score: {round(score, 4)} \nAccuracy Score: {round(acc_score, 4):.2%}')
+    # ax.legend()
+    # plt.show()
+
+
+    # Visualize 2d
+    ax = sns.scatterplot(data = X, x=0, y=1, hue = 'predicted clusters', style='true labels (adversarial = 1)')
     ax.set(xlabel = 'Component 0',
            ylabel = 'Component 1',
            title = f'GMM Clustering with 2 Components\nSilhouette Score: {round(score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
     plt.show()
+
 if __name__:
     main()
