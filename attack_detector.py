@@ -129,7 +129,7 @@ class ResNet1D(nn.Module):
 
 def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
 
-    full_dataset = adv_obs_dataset("benign_obs_data.csv", "adversarial_obs_data.csv")
+    full_dataset = adv_obs_dataset("multi_benign_obs_data.csv", "multi_adversarial_obs_data.csv")
     input_dim = full_dataset.data.shape[1]
 
     # Split into train and val
