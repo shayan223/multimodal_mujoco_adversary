@@ -27,7 +27,7 @@ from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train_on_defense=False,target_modality=None,collect_only_success=True, data_prefix='multi'):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',train_on_defense=False,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -235,13 +235,13 @@ def adversary(actor, obs, target_modality=None):
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.015, target_modality=target_modality)
 
     return obs
 
 
 
-def fgsm_attack(model, input_vals, eps=0.007, target_modality=None,outputs=None) :
+def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None) :
     
     input_vals.requires_grad = True
             
