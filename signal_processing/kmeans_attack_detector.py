@@ -32,7 +32,7 @@ def LDA_transform_features(n_comp, features, label):
 
 def main():
     # Read in data 
-    filename = os.path.join(os.getcwd(), "signal_processing", "data", "combined_sample_2.csv")
+    filename = os.path.join(os.getcwd(), "signal_processing", "data", "multi_combined_sample_normalized.csv")
     df = pd.read_csv(filename)
     df = df.drop(columns='Unnamed: 0')
 
@@ -40,18 +40,11 @@ def main():
     X = df.drop(columns='adversarial')
     y = df['adversarial']
 
-    # Feature transformations
-    # Normalization Methods
-    # X = pd.DataFrame(normalize(X))
-    X = pd.DataFrame(MinMaxScaler().fit_transform(X))
     # PCA 
-    # X = pca_transform_features(n_comp=3, features=X)
-    # LDA 
-    X = LDA_transform_features(n_comp=1, features=X, label=y)
-
+    X_pca_2 = pca_transform_features(n_comp=2, features=X)
 
     # Fit KMeans Model 
-    s_score, clusters, centroids = fit_kmeans(X)
+    s_score, clusters, centroids = fit_kmeans(X_pca_2)
     print(f'Silhouette score: {s_score}')
 
     # Calculate clustering accuracy
@@ -59,16 +52,16 @@ def main():
     print(f'Accuracy Score: {acc_score:.2%}')
 
     # Add transformed features, true labels, and predicted labels to df
-    plot_df = pd.concat([X,y], axis=1)
+    plot_df = pd.concat([X_pca_2,y], axis=1)
     plot_df['clusters'] = clusters
 
-    # # Visualize -- 2d
-    # ax = sns.scatterplot(data=plot_df, x=0, y=1, hue='clusters', style='adversarial')
-    # sns.scatterplot(x=centroids[:,0], y=centroids[:,1], color = 'k')
-    # ax.set(xlabel='Component 0', 
-    #        ylabel='Component 1',
-    #        title = f'KMeans Clustering with PCA (2 Components) \nSilhouette Score: {round(s_score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
-    # plt.show()
+    # Visualize -- 2d
+    ax = sns.scatterplot(data=plot_df, x=0, y=1, hue='clusters', style='adversarial')
+    sns.scatterplot(x=centroids[:,0], y=centroids[:,1], color = 'k')
+    ax.set(xlabel='Component 0', 
+           ylabel='Component 1',
+           title = f'KMeans Clustering with PCA (2 Components) \nSilhouette Score: {round(s_score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
+    plt.show()
 
     # # Visualize -- 3d
     # x1 = plot_df[0]
@@ -97,6 +90,21 @@ def main():
     # ax.set_title(f'KMeans Clustering with PCA (3 Components)\nSilhouette Score: {round(s_score, 4)} \nAccuracy Score: {round(acc_score, 4):.2%}')
     # ax.legend()
     # plt.show()
+
+    # LDA 
+    X_lda = LDA_transform_features(n_comp=1, features=X, label=y)
+
+    # Fit KMeans Model 
+    s_score, clusters, centroids = fit_kmeans(X_lda)
+    print(f'Silhouette score: {s_score}')
+
+    # Calculate clustering accuracy
+    acc_score = accuracy_score(y, clusters)
+    print(f'Accuracy Score: {acc_score:.2%}')
+
+    # Add transformed features, true labels, and predicted labels to df
+    plot_df = pd.concat([X_lda,y], axis=1)
+    plot_df['clusters'] = clusters
 
     # Visualize
     y_vals = [0] * plot_df.shape[0]
