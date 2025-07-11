@@ -2,11 +2,11 @@ import pandas as pd
 import os 
 
 #Read in Adversarial Dataset
-adv_file = os.path.join(os.getcwd(), "signal_processing", "data", "adversarial_obs_data_2.csv")
+adv_file = os.path.join(os.getcwd(), "signal_processing", "data", "mujoco_ant_obs_dataset", "only_success_500k", "multi_adversarial_obs_data.csv")
 adversarial_df = pd.read_csv(adv_file, header=0)
 
 #Read in Benign Dataset
-ben_file = os.path.join(os.getcwd(), "signal_processing","data", "benign_obs_data_2.csv")
+ben_file = os.path.join(os.getcwd(), "signal_processing","data", "mujoco_ant_obs_dataset", "only_success_500k", "multi_benign_obs_data.csv")
 benign_df = pd.read_csv(ben_file, header=0)
 
 # Drop the 'Unamed 0' Column
@@ -28,4 +28,4 @@ combined_df = pd.concat([adversarial_sampled,benign_sampled])
 
 # Save to file in data folder
 #combined_df.to_csv(os.path.join(os.getcwd(), "signal_processing","data", 'combined_labeled_obs_data.csv'))
-combined_df.to_csv(os.path.join(os.getcwd(), "signal_processing","data", 'combined_sample_2.csv'))
+combined_df.to_csv(os.path.join(os.getcwd(), "signal_processing","data", 'multi_combined_sample.csv'))
