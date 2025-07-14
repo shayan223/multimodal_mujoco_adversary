@@ -27,7 +27,7 @@ from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train_on_defense=False,target_modality=None,collect_only_success=False):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',train_on_defense=False,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -156,9 +156,17 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
 
             ret_mean = return_tracker.mean()
 
-            #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
+            
             if(generate_dataset == True):
-                if(global_steps > 1.5e6):  #if(ret_mean > 0):
+                #If we only want to collect successfull attacks
+                if(collect_only_success == True):
+                    if(global_steps > 1.5e6 and ret_mean < 2):
+                        print("Sucessfull attack, saving data!")
+                        #extend dataset to include new values, rather than nesting lists
+                        benign_dataset.extend(dataset_buffer)
+                        adv_dataset.extend(dataset_adv_buffer)
+                #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
+                elif(global_steps > 1.5e6):  #if(ret_mean > 0):
                     print("Sucessfull episode, saving data!")
                     #extend dataset to include new values, rather than nesting lists
                     benign_dataset.extend(dataset_buffer)
@@ -215,9 +223,9 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method='Gaussian',train
         print('##############')
         print('Saving Dataset! ')
         benign_dataset_df = pd.DataFrame(benign_dataset)
-        benign_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/benign_obs_data.csv')
+        benign_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/'+data_prefix+'_benign_obs_data.csv')
         adv_dataset_df = pd.DataFrame(adv_dataset)
-        adv_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/adversarial_obs_data.csv')
+        adv_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/'+data_prefix+'_adversarial_obs_data.csv')
         print('Dataset Saved!')
         print('###############')
 
@@ -227,13 +235,13 @@ def adversary(actor, obs, target_modality=None):
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.015, target_modality=target_modality)
 
     return obs
 
 
 
-def fgsm_attack(model, input_vals, eps=0.007, target_modality=None,outputs=None) :
+def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None) :
     
     input_vals.requires_grad = True
             
