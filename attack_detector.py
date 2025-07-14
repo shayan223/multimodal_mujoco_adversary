@@ -35,6 +35,7 @@ class adv_obs_dataset(Dataset):
         print("Total Number of Samples in Dataset: ", len(self.data))
         self.labels = np.concatenate((labels_benign, labels_adv))
 
+
         # Shuffle
         indices = np.random.permutation(len(self.labels))
         self.data = self.data[indices]
@@ -68,15 +69,19 @@ class adv_detector_nn(nn.Module):
         self.bn1 = nn.BatchNorm1d(256)
 
         # Layer 2
-        self.fc2 = nn.Linear(256, 128)
-        self.bn2 = nn.BatchNorm1d(128)
+        self.fc2 = nn.Linear(256, 256)
+        self.bn2 = nn.BatchNorm1d(256)
 
         # Layer 3
-        self.fc3 = nn.Linear(128, 32)
-        self.bn3 = nn.BatchNorm1d(32)
+        self.fc3 = nn.Linear(256, 256)
+        self.bn3 = nn.BatchNorm1d(256)
+
+        # Layer 5
+        self.fc3 = nn.Linear(256, 128)
+        self.bn3 = nn.BatchNorm1d(128)
 
         # Output layer
-        self.output = nn.Linear(32, 1)
+        self.output = nn.Linear(128, 1)
 
         self.dropout = nn.Dropout(dropout_rate)
 
@@ -96,6 +101,7 @@ class adv_detector_nn(nn.Module):
         #x = self.bn3(x)
         x = F.relu(x)
         #x = self.dropout(x)
+
 
         x = self.output(x)
         x = torch.sigmoid(x)  # Or remove this if using BCEWithLogitsLoss
@@ -127,9 +133,9 @@ class ResNet1D(nn.Module):
         x = x.unsqueeze(1)  # [B, 1, input_dim]
         return self.resnet(x)
 
-def train_adv_classifier(epochs=10,batch_size=64, lr=1e-3):
+def train_adv_classifier(epochs=15,batch_size=64, lr=1e-3):
 
-    full_dataset = adv_obs_dataset("multi_benign_obs_data.csv", "multi_adversarial_obs_data.csv")
+    full_dataset = adv_obs_dataset("multi_fgsm015_adversarial_obs_data.csv", "multi_fgsm015_benign_obs_data.csv")
     input_dim = full_dataset.data.shape[1]
 
     # Split into train and val
