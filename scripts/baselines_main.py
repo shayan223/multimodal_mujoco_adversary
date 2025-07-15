@@ -26,8 +26,12 @@ from ddiffpg.utils.plot_util import plot_traj
 from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
+from defense_vae import VAE_3d
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',train_on_defense=False,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015'):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_defense=False,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -42,9 +46,17 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',trai
 
         env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.num_envs, random_init=cfg.env.random_init)
         print('CURRENT ENV TYPE: ', type(env))
+        if(defence_method == 'VAE'):
+            def_model = VAE_3d()
+            def_model.load_state_dict(torch.load('/home/shayan/github/multimodal_mujoco_adversary/defence_vae.pth', weights_only=True))
+            def_model.eval()
+            def_model = def_model.to(device)
+        else:
+            def_model=None
         #Here we wrap the env to include our defense method in training
         if(defence_method is not None) and (train_on_defense == True):
-            env = DefenceObsWrapper(env, episode_len, defence_method)
+            env = DefenceObsWrapper(env, episode_len, defence_method,defence_model=def_model)
+
         else:
             env = D4RLEnvWrapper(env, episode_len)
 
@@ -134,7 +146,7 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='Gaussian',trai
                 
                 if(defence_method is not None):
                     ######## Defence purification ##########
-                    defence_func = defender(defence='Gaussian')
+                    defence_func = defender(defence=defence_method,defence_model=def_model)
                     obs = defence_func(obs)
 
                 #########################################
@@ -282,7 +294,7 @@ def defender(adv_input, defence=None):
     
     return purified_input
 '''
-def defender(defence=None):
+def defender(defence=None, defence_model=None):
 
     if(defence == None):
         def no_defend(obs):
@@ -298,18 +310,38 @@ def defender(defence=None):
                 obs = obs + (torch.randn_like(obs) * scaling_factor)
             return obs
         return gaussian_defend
+    
+    if(defence == 'VAE'):
+        def vae_defend(obs):
+            #Reshape to square vector
+            batch_size = obs.size(0)
+            N = obs.size(1)
+            obs = torch.nn.functional.pad(obs, (0, 36 - N))
+            obs = obs.view(batch_size, 1, 6, 6)#.squeeze(0)
+
+            obs, _, _= defence_model(obs)
+            #return vector to its original dims
+            #N = 29
+            #obs = obs.view(-1) #flatten to (36,)
+            #obs = obs[:N] #remove the padding
+            obs = obs.view(batch_size, -1) #flatten to (batch_size, 36)
+            obs = obs[:, :N] #remove the padding
+
+            return obs
+        return vae_defend
+
 
 
 
 class DefenceObsWrapper:
-    def __init__(self, env, episode_len, defence_method):
+    def __init__(self, env, episode_len, defence_method, defence_model=None):
         self.env = env
         self.observation_space = np.zeros(self.env.observation_space.shape[1])
         self.action_space = np.zeros(self.env.action_space.shape[1])
         self.max_episode_length = episode_len
         self.device = torch.device("cuda:0")
         self.defence_method = defence_method
-        self.defence_func = defender(defence_method)
+        self.defence_func = defender(defence_method,defence_model=defence_model)
 
 
     def reset(self):

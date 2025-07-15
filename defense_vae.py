@@ -279,7 +279,7 @@ def train_vae_mnist(EPOCHS=10):
         datasets.MNIST('data', train=False, transform=transforms.ToTensor()),
         batch_size=1)'''
     # Split into train and validation
-    dataset = VAE_adv_obs_dataset('benign_obs_data.csv','adversarial_obs_data.csv')#,transforms=transforms.ToTensor())
+    dataset = VAE_adv_obs_dataset('multi_fgsm015_adversarial_obs_data.csv','multi_fgsm015_benign_obs_data.csv')#,transforms=transforms.ToTensor())
     val_fraction = 0.2
     val_size = int(len(dataset) * val_fraction)
     train_size = len(dataset) - val_size
