@@ -42,10 +42,7 @@ def lda_transform_features(n_comp, features, label):
     transformed_features = pd.DataFrame(lda.fit_transform(features, label))
     return transformed_features
     
-
-def main():
-    # Read in data 
-    filename = os.path.join(os.getcwd(), "signal_processing", "data", "multi_combined_sample_normalized.csv")
+def best_gmm(filename):
     df = pd.read_csv(filename)
     df = df.drop(columns='Unnamed: 0')
 
@@ -53,8 +50,26 @@ def main():
     X = df.drop(columns='adversarial', axis=1)
     y = df['adversarial']
 
+    # Fit GMM
+    labels, score = fit_gmm(n_comp=2, features=X)
 
-    labels, score = fit_gmm(n_clusters=2, features=X)
+    # Relabel clusters by majority true label
+    relabeled_labels = relabel_clusters_by_majority(y, labels)
+    acc_score = accuracy_score(y, relabeled_labels)
+    
+    return {'silhouette_score': score, 'accuracy': acc_score}
+
+def main():
+    # Read in data 
+    filename = os.path.join(os.getcwd(), "combined_obs_data_5000.csv")
+    df = pd.read_csv(filename)
+    df = df.drop(columns='Unnamed: 0')
+
+    # Split into features and label
+    X = df.drop(columns='adversarial', axis=1)
+    y = df['adversarial']
+
+    labels, score = fit_gmm(n_comp=2, features=X)
     acc_score = accuracy_score(y, labels)
     print(f's-score: {score}, acc score: {acc_score}')
 
@@ -113,5 +128,5 @@ def main():
            title = f'GMM Clustering with 2 Components\nSilhouette Score: {round(score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
     plt.show()
 
-if __name__:
-    main()
+# if __name__:
+#     main()

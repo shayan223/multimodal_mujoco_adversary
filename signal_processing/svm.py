@@ -7,13 +7,13 @@ from sklearn.decomposition import PCA
 from sklearn.svm import SVC, OneClassSVM
 from sklearn.metrics import accuracy_score, classification_report   
 
-def train_test_svm(X_train, X_test, y_train, y_test):
+def train_test_svm(X_train, X_test, y_train, y_test, C=1000, gamma=1):
     model = SVC(kernel = 'rbf', C=1000, gamma=1, decision_function_shape='ovo')
     # model = SVC(kernel = 'rbf', C=1000, gamma=0.1, decision_function_shape='ovo')
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
     acc_score = accuracy_score(y_test, predictions)
-    return model, acc_score, predictions
+    return acc_score, predictions
 
 def train_test_OCSVM(X_train, X_test, y_train, y_test):
     model = OneClassSVM(kernel='rbf', degree=3, gamma=0.1, nu=0.01)
@@ -27,10 +27,37 @@ def pca_transform_features(n_comp, features):
     transformed_features = pd.DataFrame(pca.fit_transform(features))
     return transformed_features 
 
+def svm_classifier(file):
+    combined_df = pd.read_csv(file)
+    combined_df = combined_df.drop(columns='Unnamed: 0')  # Ensure this column is dropped if it exists
+
+    # Split into features and label
+    X = combined_df.drop(columns='adversarial', axis=1)
+    y = combined_df['adversarial']
+
+    # Split into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=1234)
+
+    # Train and evaluate SVM model
+    acc_score, label_predictions = train_test_svm(X_train, X_test, y_train, y_test) #, grid.best_params_['C'], grid.best_params_['gamma'])
+    
+    # Collect metrics
+    precision = classification_report(y_test, label_predictions, output_dict=True)['1']['precision']
+    recall = classification_report(y_test, label_predictions, output_dict=True)['1']['recall']
+    f1_score = classification_report(y_test, label_predictions, output_dict=True)['1']['f1-score']
+    acc_score = accuracy_score(y_test, label_predictions)
+
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1_score,
+        'accuracy': acc_score
+    }
+
 def main():
 
     # Read in data 
-    filename = os.path.join(os.getcwd(), "signal_processing", "data", "mutli_fgsm015_combined_sample.csv")
+    filename = os.path.join(os.getcwd(), "combined_obs_data_5000.csv")
     df = pd.read_csv(filename)
     df = df.drop(columns='Unnamed: 0')
 
@@ -41,21 +68,17 @@ def main():
     X_train, X_test, y_train, y_test = train_test_split(X,y,test_size = 0.30, random_state=1234)
 
     # #Hyper parameter tuning
-    # param_grid = {'degree': [1,2,3],
-    #             'gamma': [1, 0.1, 0.01],
-    #             'nu': [0.001, 0.01, 0.1]}  
-    # grid =  GridSearchCV(OneClassSVM(), param_grid, scoring= 'accuracy' , refit=True, verbose=3)
+    # param_grid = {'C': [0.1, 1, 10, 100, 1000],
+    #               'gamma': [0.0001, 0.001, 0.01, 0.1,1],
+    #               'decision_function_shape': ['ovo', 'ovr']}
+    # grid =  GridSearchCV(SVC(), param_grid, refit=True, verbose=3)
     # grid.fit(X_train,y_train)
     # print(grid.best_params_)
-
-    model, acc_score, class_label_predictions = train_test_svm(X_train, X_test, y_train, y_test)
-    print(classification_report(y_test, class_label_predictions))
 
     # model, acc_score, class_label_predictions = train_test_OCSVM(X_train, X_test, y_train, y_test)
     # print(f"Accuracy Score: {acc_score}")
     # print(classification_report(y_test, class_label_predictions))
 
-
-    
-
-main()
+    acc_score, label_predictions = train_test_svm(X_train, X_test, y_train, y_test)#, grid.best_params_['C'], grid.best_params_['gamma'])
+    print(classification_report(y_test, label_predictions))
+    print(f"Accuracy Score: {acc_score}")
