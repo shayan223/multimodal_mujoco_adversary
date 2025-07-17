@@ -28,11 +28,47 @@ def pca_transform_features(n_comp, features):
 def LDA_transform_features(n_comp, features, label):
     lda = LinearDiscriminantAnalysis(n_components=n_comp)
     transformed_data = pd.DataFrame(lda.fit_transform(features,label))
+
     return transformed_data
+
+def best_kmeans(file):
+    df = pd.read_csv(file)
+    df = df.drop(columns='Unnamed: 0')
+
+    # Split into features and label
+    X = df.drop(columns='adversarial')
+    y = df['adversarial']
+
+    # PCA 
+    X_pca_2 = pca_transform_features(n_comp=2, features=X)
+
+    # Fit KMeans Model 
+    s_score, clusters, centroids = fit_kmeans(X_pca_2)
+
+    # Calculate clustering accuracy
+    acc_score = accuracy_score(y, clusters)
+
+
+# Plotting 
+    # Add transformed features, true labels, and predicted labels to df
+    # plot_df = pd.concat([X_pca_2,y], axis=1)
+    # plot_df['clusters'] = clusters
+
+    # # Visualize -- 2d
+    # ax = sns.scatterplot(data=plot_df, x=0, y=1, hue='clusters', style='adversarial')
+    # sns.scatterplot(x=centroids[:,0], y=centroids[:,1], color = 'k')
+    # ax.set(xlabel='Component 0', 
+    #        ylabel='Component 1',
+    #        title = f'KMeans Clustering with PCA (2 Components) \nSilhouette Score: {round(s_score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
+    # plt.show()
+    return {
+        'silhouette_score': s_score,
+        'accuracy': acc_score
+    }
 
 def main():
     # Read in data 
-    filename = os.path.join(os.getcwd(), "signal_processing", "data", "multi_combined_sample_normalized.csv")
+    filename = os.path.join(os.getcwd(), "combined_obs_data_5000.csv")
     df = pd.read_csv(filename)
     df = df.drop(columns='Unnamed: 0')
 

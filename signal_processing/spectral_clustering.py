@@ -24,18 +24,34 @@ def pca_transform_features(n_comp, features):
     transformed_features = pd.DataFrame(pca.fit_transform(features))
     return transformed_features
 
+def best_spectral(filename):
+    df = pd.read_csv(filename)
+    df = df.drop(columns='Unnamed: 0')
+
+    # Split into features and label
+    X = df.drop(columns='adversarial', axis=1)
+    y = df['adversarial']
+
+    # Normalize features
+    X_normalized = normalize(X)
+
+    # Fit spectral clustering model
+    labels, score = fit_spectral_model(n_clusters=3, features=X_normalized)
+
+    return {'silhouette_score': score, 'accuracy': accuracy_score(y, labels)}
+
 def main():
     # Read in data 
-    filename = os.path.join(os.getcwd(), "signal_processing", "data", "multi_combined_sample.csv")
+    filename = os.path.join(os.getcwd(), "combined_obs_data_5000.csv")
     df = pd.read_csv(filename)
     df = df.drop(columns='Unnamed: 0')
     
     X = df.drop(columns='adversarial', axis=1)
     y = df['adversarial']
 
-    labels, score = fit_spectral_model(n_clusters=2, features=X)
-    acc_score = accuracy_score(y, labels)
-    print(f's-score: {score}, acc score: {acc_score}')
+    # labels, score = fit_spectral_model(n_clusters=2, features=X)
+    # acc_score = accuracy_score(y, labels)
+    # print(f's-score: {score}, acc score: {acc_score}')
 
     # PCA transform
     X_pca_3 = pca_transform_features(n_comp=3, features=X)
@@ -89,5 +105,5 @@ def main():
            title = f'Spectral Clustering with 2 Components\nSilhouette Score: {round(score, 4)}\nAccuracy Score: {round(acc_score, 4):.2%}')
     plt.show()
 
-if __name__:
-    main()
+# if __name__:
+#     main()
