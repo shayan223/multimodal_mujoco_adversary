@@ -311,7 +311,7 @@ def defender(defence=None, defence_model=None):
             return obs
         return gaussian_defend
     
-    if(defence == 'VAE'):
+    if(defence == 'VAE_3d'):
         def vae_defend(obs):
             #Reshape to square vector
             batch_size = obs.size(0)
@@ -326,6 +326,13 @@ def defender(defence=None, defence_model=None):
             #obs = obs[:N] #remove the padding
             obs = obs.view(batch_size, -1) #flatten to (batch_size, 36)
             obs = obs[:, :N] #remove the padding
+
+            return obs
+        
+    if(defence == 'VAE'):
+        def vae_defend(obs):
+
+            obs, _, _= defence_model(obs)
 
             return obs
         return vae_defend
