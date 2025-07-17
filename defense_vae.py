@@ -15,7 +15,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class VAE_adv_obs_dataset(Dataset):
-    def __init__(self, benign_csv, adv_csv, transforms=None, dtype=torch.float32):
+    def __init__(self, benign_csv, adv_csv, transforms=None, dtype=torch.float32, square_data=False):
         """
         Args:
             benign_csv (str): CSV path for data used as labels (and inputs).
@@ -29,6 +29,7 @@ class VAE_adv_obs_dataset(Dataset):
         self.dtype = dtype
         self.N = len(self.benign)
         self.transforms = transforms
+        self.square_data = square_data
 
         # Create self-pairs and cross-pairs
         # Total dataset: 2N entries
@@ -62,13 +63,14 @@ class VAE_adv_obs_dataset(Dataset):
         x = torch.tensor(x, dtype=self.dtype)
         y = torch.tensor(y, dtype=self.dtype)
 
-        # Pad to 36 elements, then reshape to 6x6
-        if x.numel() < 36:
-            x = torch.nn.functional.pad(x, (0, 36 - x.numel()))
-        x = x.view(6, 6)
-        if y.numel() < 36:
-            y = torch.nn.functional.pad(y, (0, 36 - y.numel()))
-        y = y.view(6, 6)
+        if(self.square_data):
+            # Pad to 36 elements, then reshape to 6x6
+            if x.numel() < 36:
+                x = torch.nn.functional.pad(x, (0, 36 - x.numel()))
+            x = x.view(6, 6)
+            if y.numel() < 36:
+                y = torch.nn.functional.pad(y, (0, 36 - y.numel()))
+            y = y.view(6, 6)
 
         return x, y
 
@@ -251,8 +253,8 @@ class VAE_3d(nn.Module):
     
 
 class VAE_simple(nn.Module):
-    def __init__(self, input_dim=29, latent_dim=5):
-        super(SimpleVAE, self).__init__()
+    def __init__(self, input_dim=30, latent_dim=5):
+        super(VAE_simple, self).__init__()
         # Encoder
         self.fc1 = nn.Linear(input_dim, 64)
         self.fc_mu = nn.Linear(64, latent_dim)
@@ -275,7 +277,7 @@ class VAE_simple(nn.Module):
         else:
             return mu
 
-    def decode(self, z):
+    def decoder(self, z):
         h = F.relu(self.fc2(z))
         #use sigmoid if input is normalized to [0, 1]
         return self.fc3(h) #torch.sigmoid(self.fc3(h))  
