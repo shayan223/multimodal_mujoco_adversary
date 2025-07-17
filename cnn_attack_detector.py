@@ -70,52 +70,34 @@ class adv_obs_dataset(Dataset):
 class cnn_detector(nn.Module):
     def __init__(self):
         super(cnn_detector, self).__init__()
-        # Convolutional layer 1
-        self.conv1 = nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=2)
-        # Max pooling layer 1
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        # Convolutional layer 2
-        self.conv2 = nn.Conv2d(6, 16, kernel_size=5, stride=1, padding=2)
-        # Max pooling layer 2
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        # Fully connected layer 1
-        self.fc1 = nn.Linear(16 * 1 * 1, 128)   
-        # Fully connected layer 2
-        self.fc2 = nn.Linear(128,32)       
-        # Output layer
-        self.output = nn.Linear(32, 1)  # Output for binary classification     
-
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=2, kernel_size=2, stride=1) 
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=1, padding=0)
+        # self.conv2 = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=2, stride=1)
+        # self.pool2 = nn.MaxPool2d(kernel_size=2, stride=1, padding=0)
+        self.flat = nn.Flatten()
+        self.fc1 = nn.Linear(32, 32) 
+        self.output = nn.Linear(32,1)       
     def forward(self, x):
-
         x = self.conv1(x)
-        x = self.pool1(x)
         x = F.relu(x)
-
-        x = self.conv2(x)
-        x = self.pool2(x)
-        x = F.relu(x)
-
-        x = x.view(x.size(0), -1)
-
+        x = self.pool1(x)  # Pooling layer
+        # x = self.conv2(x)
+        # x = F.relu(x)
+        # x = self.pool2(x)  # Pooling layer
+        x = self.flat(x)  # Flatten the tensor
         x = self.fc1(x)
         x = F.relu(x)
-
-        x = self.fc2(x)
-        x = F.relu(x)
-
         x = self.output(x)
-        x = torch.sigmoid(x) 
+        x = F.sigmoid(x)
 
         return x
     
 
-def train_adv_cnn_classifier(epochs=10, batch_size=32, learning_rate=0.001):
+def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
 
     transform = transforms.ToTensor()
      
-    full_dataset = adv_obs_dataset("multi_fgsm015_adversarial_obs_data.csv", "multi_fgsm015_benign_obs_data.csv")
+    full_dataset = adv_obs_dataset("signal_processing/multi_fgsm015_adversarial_obs_data.csv", "signal_processing/multi_fgsm015_benign_obs_data.csv")
 
     # Split into train and val
     indices = list(range(len(full_dataset)))
@@ -126,9 +108,6 @@ def train_adv_cnn_classifier(epochs=10, batch_size=32, learning_rate=0.001):
 
     train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_subset, batch_size=batch_size)
-
-    # example_x, example_y = next(iter(train_loader))
-    # print(f"{example_y.float().shape}")
 
     # Model, loss, optimizer
     model = cnn_detector()
@@ -143,7 +122,7 @@ def train_adv_cnn_classifier(epochs=10, batch_size=32, learning_rate=0.001):
         
             optimizer.zero_grad() # zero the gradients
 
-            outputs = model(batch_x.unsqueeze(1))#.squeeze(1)  # shape: (batch_size,)
+            outputs = model(batch_x.unsqueeze(1))  # Add channel dimension
             loss = criterion(outputs, batch_y.float())
             loss.backward()
             optimizer.step()
@@ -170,7 +149,24 @@ def train_adv_cnn_classifier(epochs=10, batch_size=32, learning_rate=0.001):
     'val_acc': val_acc,
 }, "best_model.pt")
 
-        
+def debugging():
+    batch_size=64
+
+    full_dataset = adv_obs_dataset("signal_processing/multi_fgsm015_adversarial_obs_data.csv", "signal_processing/multi_fgsm015_benign_obs_data.csv")
+
+    # Split into train and val
+    indices = list(range(len(full_dataset)))
+    train_indices, val_indices = train_test_split(indices, test_size=0.2, random_state=42)
+
+    train_subset = torch.utils.data.Subset(full_dataset, train_indices)
+    val_subset = torch.utils.data.Subset(full_dataset, val_indices)
+
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_subset, batch_size=batch_size)
+
+    example_x, example_y = next(iter(train_loader))
+    print("x:", example_x[0].view(example_x[0].size(0), -1).shape)
 
 if __name__ == "__main__":
     train_adv_cnn_classifier()
+    # debugging()
