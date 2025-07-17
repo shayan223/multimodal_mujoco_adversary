@@ -250,6 +250,51 @@ class VAE_3d(nn.Module):
         return BCE + KLD, BCE, KLD
     
 
+class VAE_simple(nn.Module):
+    def __init__(self, input_dim=29, latent_dim=5):
+        super(SimpleVAE, self).__init__()
+        # Encoder
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.fc_mu = nn.Linear(64, latent_dim)
+        self.fc_logvar = nn.Linear(64, latent_dim)
+
+        # Decoder
+        self.fc2 = nn.Linear(latent_dim, 64)
+        self.fc3 = nn.Linear(64, input_dim)
+
+    def encoder(self, x):
+        h = F.relu(self.fc1(x))
+        return self.fc_mu(h), self.fc_logvar(h)
+
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def decode(self, z):
+        h = F.relu(self.fc2(z))
+        #use sigmoid if input is normalized to [0, 1]
+        return self.fc3(h) #torch.sigmoid(self.fc3(h))  
+
+    def forward(self, x):
+
+        # The entire pipeline of the VAE: encoder -> reparameterization -> decoder
+        # output, mu, and logVar are returned for loss computation
+        mu, logvar = self.encoder(x)
+        z = self.reparameterize(mu, logvar)
+        decoded_z = self.decoder(z)
+
+        return decoded_z, mu, logvar
+    
+    def loss(self, recon_x, x, mu, logvar):
+        
+        BCE = F.smooth_l1_loss(recon_x, x, reduction='sum')#F.binary_cross_entropy(recon_x, x, size_average=False)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return BCE + KLD, BCE, KLD
 
 def train_vae_mnist(EPOCHS=10):
     """
@@ -294,7 +339,8 @@ def train_vae_mnist(EPOCHS=10):
     """
     Initialize the network and the Adam optimizer
     """
-    net = VAE_3d().to(device)
+    #net = VAE_3d().to(device)
+    net = VAE_simple().to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
 

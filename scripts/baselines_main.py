@@ -31,7 +31,7 @@ from defense_vae import VAE_3d
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_defense=False,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015'):
+def main(cfg: DictConfig, generate_dataset=True, defence_method=None,train_on_defense=False,target_modality='angular',collect_only_success=False, data_prefix='angular_fgsm015'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
