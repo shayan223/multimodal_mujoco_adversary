@@ -338,7 +338,7 @@ def defender(defence=None, defence_model=None):
         def vae_defend(obs):
             obs = torch.Tensor(obs).to(device)
             obs, _, _= defence_model(obs)
-            obs = obs.cpu().numpy()
+            #obs = obs.cpu().detach().numpy()
 
             return obs
         return vae_defend
