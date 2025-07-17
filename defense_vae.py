@@ -259,15 +259,15 @@ class VAE_simple(nn.Module):
         super(VAE_simple, self).__init__()
         # Encoder
         self.input_norm = nn.BatchNorm1d(input_dim)
-        self.fc1 = nn.Linear(input_dim, 32)
-        self.fc2 = nn.Linear(32, 16)
-        self.fc_mu = nn.Linear(16, latent_dim)
-        self.fc_logvar = nn.Linear(16, latent_dim)
+        self.fc1 = nn.Linear(input_dim, 16)
+        self.fc2 = nn.Linear(16, 8)
+        self.fc_mu = nn.Linear(8, latent_dim)
+        self.fc_logvar = nn.Linear(8, latent_dim)
 
         # Decoder
-        self.dec_fc1 = nn.Linear(latent_dim, 16)
-        self.dec_fc2 = nn.Linear(16, 32)
-        self.dec_fc3 = nn.Linear(32, input_dim)
+        self.dec_fc1 = nn.Linear(latent_dim, 8)
+        self.dec_fc2 = nn.Linear(8, 16)
+        self.dec_fc3 = nn.Linear(16, input_dim)
 
     def encoder(self, x):
         x = self.input_norm(x)
