@@ -321,7 +321,7 @@ def train_vae_mnist(EPOCHS=30):
     Initialize Hyperparameters
     """
     batch_size = 32
-    learning_rate = 1e-3
+    learning_rate = 1e-4
     num_epochs = EPOCHS
 
 
@@ -355,8 +355,8 @@ def train_vae_mnist(EPOCHS=30):
     """
     #net = VAE_3d().to(device)
     net = VAE_simple().to(device)
-    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
-
+    #optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
 
 
     """
