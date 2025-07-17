@@ -21,8 +21,8 @@ class VAE_adv_obs_dataset(Dataset):
             benign_csv (str): CSV path for data used as labels (and inputs).
             adv_csv (str): CSV path for data used as inputs.
         """
-        self.benign = pd.read_csv(benign_csv).values.astype(np.float32)
-        self.adv = pd.read_csv(adv_csv).values.astype(np.float32)
+        self.benign = pd.read_csv(benign_csv,index_col=0).values.astype(np.float32)
+        self.adv = pd.read_csv(adv_csv,index_col=0).values.astype(np.float32)
 
         assert self.benign.shape == self.adv.shape, "Both files must have the same shape"
 
@@ -255,21 +255,24 @@ class VAE_3d(nn.Module):
     
 
 class VAE_simple(nn.Module):
-    def __init__(self, input_dim=30, latent_dim=5):
+    def __init__(self, input_dim=29, latent_dim=8):
         super(VAE_simple, self).__init__()
         # Encoder
         self.input_norm = nn.BatchNorm1d(input_dim)
-        self.fc1 = nn.Linear(input_dim, 64)
-        self.fc_mu = nn.Linear(64, latent_dim)
-        self.fc_logvar = nn.Linear(64, latent_dim)
+        self.fc1 = nn.Linear(input_dim, 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc_mu = nn.Linear(16, latent_dim)
+        self.fc_logvar = nn.Linear(16, latent_dim)
 
         # Decoder
-        self.fc2 = nn.Linear(latent_dim, 64)
-        self.fc3 = nn.Linear(64, input_dim)
+        self.dec_fc1 = nn.Linear(latent_dim, 16)
+        self.dec_fc2 = nn.Linear(16, 32)
+        self.dec_fc3 = nn.Linear(32, input_dim)
 
     def encoder(self, x):
         x = self.input_norm(x)
-        h = F.relu(self.fc1(x))
+        x = F.relu(self.fc1(x))
+        h = F.relu(self.fc2(x))
         return self.fc_mu(h), self.fc_logvar(h)
 
 
@@ -282,9 +285,10 @@ class VAE_simple(nn.Module):
             return mu
 
     def decoder(self, z):
-        h = F.relu(self.fc2(z))
+        z = F.relu(self.dec_fc1(z))
+        h = F.relu(self.dec_fc2(z))
         #use sigmoid if input is normalized to [0, 1]
-        return self.fc3(h) #torch.sigmoid(self.fc3(h))  
+        return self.dec_fc3(h) #torch.sigmoid(self.fc3(h))  
 
     def forward(self, x):
 
@@ -316,7 +320,7 @@ def train_vae_mnist(EPOCHS=30):
     """
     Initialize Hyperparameters
     """
-    batch_size = 16
+    batch_size = 32
     learning_rate = 1e-3
     num_epochs = EPOCHS
 

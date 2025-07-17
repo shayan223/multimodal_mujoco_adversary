@@ -26,12 +26,12 @@ from ddiffpg.utils.plot_util import plot_traj
 from gymnasium.vector import VectorEnvWrapper
 from gymnasium import ObservationWrapper
 
-from defense_vae import VAE_3d
+from defense_vae import VAE_3d, VAE_simple
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=True, defence_method=None,train_on_defense=False,target_modality='angular',collect_only_success=False, data_prefix='angular_fgsm015'):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_defense=True,target_modality=None,collect_only_success=False, data_prefix='angular_fgsm015'):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
@@ -46,8 +46,13 @@ def main(cfg: DictConfig, generate_dataset=True, defence_method=None,train_on_de
 
         env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.num_envs, random_init=cfg.env.random_init)
         print('CURRENT ENV TYPE: ', type(env))
-        if(defence_method == 'VAE'):
+        if(defence_method == 'VAE_3d'):
             def_model = VAE_3d()
+            def_model.load_state_dict(torch.load('/home/shayan/github/multimodal_mujoco_adversary/defence_vae.pth', weights_only=True))
+            def_model.eval()
+            def_model = def_model.to(device)
+        if(defence_method == 'VAE'):
+            def_model = VAE_simple()
             def_model.load_state_dict(torch.load('/home/shayan/github/multimodal_mujoco_adversary/defence_vae.pth', weights_only=True))
             def_model.eval()
             def_model = def_model.to(device)
@@ -247,7 +252,7 @@ def adversary(actor, obs, target_modality=None):
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.015, target_modality=target_modality)
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
 
     return obs
 
@@ -331,8 +336,9 @@ def defender(defence=None, defence_model=None):
         
     if(defence == 'VAE'):
         def vae_defend(obs):
-
+            obs = torch.Tensor(obs).to(device)
             obs, _, _= defence_model(obs)
+            obs = obs.cpu().numpy()
 
             return obs
         return vae_defend
