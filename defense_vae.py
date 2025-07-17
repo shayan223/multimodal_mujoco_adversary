@@ -44,6 +44,7 @@ class VAE_adv_obs_dataset(Dataset):
         self.data_max = torch.Tensor(np.max(self.data, axis=0)).to(device)
 
 
+
     def normalize(self, x):
         return (x - self.data_min) / (self.data_max - self.data_min + 1e-8)
 
@@ -54,6 +55,7 @@ class VAE_adv_obs_dataset(Dataset):
         return 2 * self.N
 
     def __getitem__(self, idx):
+
         x = self.data[idx]
         y = self.labels[idx]
 
@@ -256,6 +258,7 @@ class VAE_simple(nn.Module):
     def __init__(self, input_dim=30, latent_dim=5):
         super(VAE_simple, self).__init__()
         # Encoder
+        self.input_norm = nn.BatchNorm1d(input_dim)
         self.fc1 = nn.Linear(input_dim, 64)
         self.fc_mu = nn.Linear(64, latent_dim)
         self.fc_logvar = nn.Linear(64, latent_dim)
@@ -265,6 +268,7 @@ class VAE_simple(nn.Module):
         self.fc3 = nn.Linear(64, input_dim)
 
     def encoder(self, x):
+        x = self.input_norm(x)
         h = F.relu(self.fc1(x))
         return self.fc_mu(h), self.fc_logvar(h)
 
@@ -294,11 +298,15 @@ class VAE_simple(nn.Module):
     
     def loss(self, recon_x, x, mu, logvar):
         
+        #print('RECON X: ',recon_x)
+        #print('Original X: ',x)
         BCE = F.smooth_l1_loss(recon_x, x, reduction='sum')#F.binary_cross_entropy(recon_x, x, size_average=False)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        #print('BCE: ',BCE)
+        #print('KLD: ',KLD)
         return BCE + KLD, BCE, KLD
 
-def train_vae_mnist(EPOCHS=10):
+def train_vae_mnist(EPOCHS=30):
     """
     Determine if any GPUs are available
     """
@@ -308,7 +316,7 @@ def train_vae_mnist(EPOCHS=10):
     """
     Initialize Hyperparameters
     """
-    batch_size = 128
+    batch_size = 16
     learning_rate = 1e-3
     num_epochs = EPOCHS
 
@@ -334,8 +342,8 @@ def train_vae_mnist(EPOCHS=10):
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
     # Create dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(val_dataset, batch_size=32)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(val_dataset, batch_size=batch_size)
 
 
     """
@@ -358,8 +366,8 @@ def train_vae_mnist(EPOCHS=10):
         avg_batch_recon = []
         for data in tqdm(train_loader):
             imgs, benign_imgs = data
-            imgs = imgs.unsqueeze(1).to(device)
-            benign_imgs = benign_imgs.unsqueeze(1).to(device)
+            imgs = imgs.to(device)
+            benign_imgs = benign_imgs.to(device)
 
             # Feeding a batch of images into the network to obtain the output image, mu, and logVar
             out, mu, logVar = net(imgs)
