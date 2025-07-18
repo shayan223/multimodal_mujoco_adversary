@@ -305,7 +305,7 @@ class VAE_simple(nn.Module):
         #print('RECON X: ',recon_x)
         #print('Original X: ',x)
         BCE = F.smooth_l1_loss(recon_x, x, reduction='sum')#F.binary_cross_entropy(recon_x, x, size_average=False)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        KLD = -0.01 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         #print('BCE: ',BCE)
         #print('KLD: ',KLD)
         return BCE + KLD, BCE, KLD
@@ -321,7 +321,7 @@ def train_vae_mnist(EPOCHS=30):
     Initialize Hyperparameters
     """
     batch_size = 32
-    learning_rate = 1e-4
+    learning_rate = 1e-3
     num_epochs = EPOCHS
 
 
@@ -355,8 +355,8 @@ def train_vae_mnist(EPOCHS=30):
     """
     #net = VAE_3d().to(device)
     net = VAE_simple().to(device)
-    #optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
-    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+    #optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
 
 
     """
@@ -397,6 +397,7 @@ def train_vae_mnist(EPOCHS=30):
         Recon_losses.append(sum(avg_batch_recon)/len(avg_batch_recon))
 
         print('Epoch {}: Loss {}'.format(epoch, loss))
+        print('KL Loss: {} Reconstruction Loss {}'.format(KL_losses[-1], Recon_losses[-1]))
 
 
     """
