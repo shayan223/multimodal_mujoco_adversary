@@ -52,6 +52,10 @@ This repository builds upon the original [DDiffPG](https://github.com/chenfh5/dd
 
 ## :scroll: Usage
 
+---
+
+## :scroll: Usage
+
 ### :pencil2: Logging <a name="logging"></a>
 
 We use Weights & Biases (W&B) for experiment tracking.
@@ -68,23 +72,7 @@ We use Weights & Biases (W&B) for experiment tracking.
 
 ### :bulb: Training <a name="training"></a>
 
-Run DDiffPG on AntMaze tasks:
-
-```bash
-python scripts/ddiffpg_main.py algo=ddiffpg_algo env.name=antmaze-v1
-```
-
----
-
-### :bookmark: Baselines <a name="baselines"></a>
-
-Run DIPO:
-
-```bash
-python scripts/baselines_main.py algo=dipo_algo env.name=antmaze-v1
-```
-
-Run SAC:
+The default and recommended training setup uses the **SAC (Soft Actor-Critic)** algorithm:
 
 ```bash
 python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
@@ -92,11 +80,30 @@ python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
 
 ---
 
+### :bookmark: Alternative Algorithms <a name="baselines"></a>
+
+You may also run experiments using algorithms derived from the original DDiffPG repository:
+
+- **DIPO** (Diffusion In Policy Optimization):
+
+    ```bash
+    python scripts/baselines_main.py algo=dipo_algo env.name=antmaze-v1
+    ```
+
+- **DDiffPG** (Deep Diffusion Policy Gradient):
+
+    ```bash
+    python scripts/ddiffpg_main.py algo=ddiffpg_algo env.name=antmaze-v1
+    ```
+
+These can be helpful for benchmarking and ablation studies.
+
+---
+
 ### :floppy_disk: Saving and Loading <a name="saving-and-loading"></a>
 
 Checkpoints are automatically saved using W&B [Artifacts](https://docs.wandb.ai/ref/python/artifact).
 
----
 
 ## :wrench: Troubleshooting
 
