@@ -31,12 +31,15 @@ from defense_vae import VAE_3d, VAE_simple
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_defense=True,target_modality=None,collect_only_success=False, data_prefix='angular_fgsm015'):
+def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_defense=True,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015', max_steps_override=5000000):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
     wandb_run = init_wandb(cfg)
     
+    if(max_steps_override):
+        cfg.max_step = max_steps_override
+
     if 'antmaze' in cfg.env.name:
         env = gym.make(cfg.env.name, reward_type=cfg.env.reward_type, random_init=cfg.env.random_init)
 
@@ -252,7 +255,7 @@ def adversary(actor, obs, target_modality=None):
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.015, target_modality=target_modality)
 
     return obs
 
@@ -284,21 +287,7 @@ def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None)
     
     return perturbed_out#.detach()
 
-'''
-def defender(adv_input, defence=None):
 
-    if(defence == 'PixelDefend'):
-        defence_method = PixelDefend(clip_values=(-1000,1000))
-        purified_input = defence_method(adv_input)
-    elif(defence == 'Gaussian'):
-        scaling_factor = 0.005
-        purified_input = adv_input + (torch.randn_like(adv_input) * scaling_factor)
-    else:
-        purified_input = adv_input
-
-    
-    return purified_input
-'''
 def defender(defence=None, defence_model=None):
 
     if(defence == None):
