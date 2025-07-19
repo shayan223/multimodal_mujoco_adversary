@@ -255,24 +255,28 @@ class VAE_3d(nn.Module):
     
 
 class VAE_simple(nn.Module):
-    def __init__(self, input_dim=29, latent_dim=8):
+    def __init__(self, input_dim=29, latent_dim=16, max_dim=64):
         super(VAE_simple, self).__init__()
         # Encoder
         self.input_norm = nn.BatchNorm1d(input_dim)
-        self.fc1 = nn.Linear(input_dim, 16)
-        self.fc2 = nn.Linear(16, 8)
-        self.fc_mu = nn.Linear(8, latent_dim)
-        self.fc_logvar = nn.Linear(8, latent_dim)
+        self.fc1 = nn.Linear(input_dim, max_dim)
+        self.fc1_bn = nn.BatchNorm1d(max_dim)
+        self.fc2 = nn.Linear(max_dim, max_dim//2)
+        self.fc2_bn = nn.BatchNorm1d(max_dim//2)
+        self.fc_mu = nn.Linear(max_dim//2, latent_dim)
+        self.fc_logvar = nn.Linear(max_dim//2, latent_dim)
 
         # Decoder
-        self.dec_fc1 = nn.Linear(latent_dim, 8)
-        self.dec_fc2 = nn.Linear(8, 16)
-        self.dec_fc3 = nn.Linear(16, input_dim)
+        self.dec_fc1 = nn.Linear(latent_dim, max_dim//2)
+        self.dec_fc1_bn = nn.BatchNorm1d(max_dim//2)
+        self.dec_fc2 = nn.Linear(max_dim//2, max_dim)
+        self.dec_fc2_bn = nn.BatchNorm1d(max_dim)
+        self.dec_fc3 = nn.Linear(max_dim, input_dim)
 
     def encoder(self, x):
         x = self.input_norm(x)
-        x = F.relu(self.fc1(x))
-        h = F.relu(self.fc2(x))
+        x = F.relu(self.fc1_bn(self.fc1(x)))
+        h = F.relu(self.fc2_bn(self.fc2(x)))
         return self.fc_mu(h), self.fc_logvar(h)
 
 
@@ -285,8 +289,8 @@ class VAE_simple(nn.Module):
             return mu
 
     def decoder(self, z):
-        z = F.relu(self.dec_fc1(z))
-        h = F.relu(self.dec_fc2(z))
+        z = F.relu(self.dec_fc1_bn(self.dec_fc1(z)))
+        h = F.relu(self.dec_fc2_bn(self.dec_fc2(z)))
         #use sigmoid if input is normalized to [0, 1]
         return self.dec_fc3(h) #torch.sigmoid(self.fc3(h))  
 
@@ -305,7 +309,7 @@ class VAE_simple(nn.Module):
         #print('RECON X: ',recon_x)
         #print('Original X: ',x)
         BCE = F.smooth_l1_loss(recon_x, x, reduction='sum')#F.binary_cross_entropy(recon_x, x, size_average=False)
-        KLD = -0.01 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        KLD = -0.001 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         #print('BCE: ',BCE)
         #print('KLD: ',KLD)
         return BCE + KLD, BCE, KLD
