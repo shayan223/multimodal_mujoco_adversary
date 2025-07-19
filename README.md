@@ -1,9 +1,9 @@
 # Multimodal Agent Test Bed
 **For the paper: "Adversarial Robustness of Multimodal RL Agents"**
 
-This repository builds upon the original [DDiffPG](https://github.com/chenfh5/ddiffpg) algorithm to create a test bed for evaluating the adversarial robustness of multimodal reinforcement learning (RL) agents.
+This repository builds upon the original [DDiffPG](https://github.com/supersglzc/ddiffpg) algorithm to create a test bed for evaluating the adversarial robustness of multimodal reinforcement learning (RL) agents.
 
-> :heart: **Credit**: We gratefully acknowledge the original authors of [DDiffPG](https://github.com/chenfh5/ddiffpg) for their foundational work. This repository extends their implementation to support multimodal RL research.
+> :heart: **Credit**: We gratefully acknowledge the original authors of [DDiffPG](https://github.com/supersglzc/ddiffpg) for their foundational work. This repository extends their implementation to support multimodal RL research.
 
 ---
 
@@ -25,8 +25,8 @@ This repository builds upon the original [DDiffPG](https://github.com/chenfh5/dd
 1. Clone the repository:
 
     ```bash
-    git clone git@github.com:ddiffpg.git
-    cd ddiffpg
+    git clone https://github.com/shayan223/multimodal_mujoco_adversary
+    cd multimodal_mujoco_adversary
     ```
 
 2. Create the Conda environment and install dependencies:
