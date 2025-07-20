@@ -255,7 +255,7 @@ class VAE_3d(nn.Module):
     
 
 class VAE_simple(nn.Module):
-    def __init__(self, input_dim=29, latent_dim=16, max_dim=64):
+    def __init__(self, input_dim=29, latent_dim=24, max_dim=128):
         super(VAE_simple, self).__init__()
         # Encoder
         self.input_norm = nn.BatchNorm1d(input_dim)
