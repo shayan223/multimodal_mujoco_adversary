@@ -255,7 +255,7 @@ class VAE_3d(nn.Module):
     
 
 class VAE_simple(nn.Module):
-    def __init__(self, input_dim=29, latent_dim=24, max_dim=128):
+    def __init__(self, input_dim=29, latent_dim=24, max_dim=256):
         super(VAE_simple, self).__init__()
         # Encoder
         self.input_norm = nn.BatchNorm1d(input_dim)
@@ -263,20 +263,25 @@ class VAE_simple(nn.Module):
         self.fc1_bn = nn.BatchNorm1d(max_dim)
         self.fc2 = nn.Linear(max_dim, max_dim//2)
         self.fc2_bn = nn.BatchNorm1d(max_dim//2)
-        self.fc_mu = nn.Linear(max_dim//2, latent_dim)
-        self.fc_logvar = nn.Linear(max_dim//2, latent_dim)
+        self.fc3 = nn.Linear(max_dim//2, (max_dim//2)//2)
+        self.fc3_bn = nn.BatchNorm1d((max_dim//2)//2)
+        self.fc_mu = nn.Linear((max_dim//2)//2, latent_dim)
+        self.fc_logvar = nn.Linear((max_dim//2)//2, latent_dim)
 
         # Decoder
-        self.dec_fc1 = nn.Linear(latent_dim, max_dim//2)
-        self.dec_fc1_bn = nn.BatchNorm1d(max_dim//2)
-        self.dec_fc2 = nn.Linear(max_dim//2, max_dim)
-        self.dec_fc2_bn = nn.BatchNorm1d(max_dim)
-        self.dec_fc3 = nn.Linear(max_dim, input_dim)
+        self.dec_fc1 = nn.Linear(latent_dim, (max_dim//2)//2)
+        self.dec_fc1_bn = nn.BatchNorm1d((max_dim//2)//2)
+        self.dec_fc2 = nn.Linear((max_dim//2)//2, max_dim//2)
+        self.dec_fc2_bn = nn.BatchNorm1d(max_dim//2)
+        self.dec_fc3 = nn.Linear(max_dim//2, max_dim)
+        self.dec_fc3_bn = nn.BatchNorm1d(max_dim)
+        self.dec_fc4 = nn.Linear(max_dim, input_dim)
 
     def encoder(self, x):
         x = self.input_norm(x)
         x = F.relu(self.fc1_bn(self.fc1(x)))
-        h = F.relu(self.fc2_bn(self.fc2(x)))
+        x = F.relu(self.fc2_bn(self.fc2(x)))
+        h = F.relu(self.fc3_bn(self.fc3(x)))
         return self.fc_mu(h), self.fc_logvar(h)
 
 
@@ -290,9 +295,10 @@ class VAE_simple(nn.Module):
 
     def decoder(self, z):
         z = F.relu(self.dec_fc1_bn(self.dec_fc1(z)))
-        h = F.relu(self.dec_fc2_bn(self.dec_fc2(z)))
+        z = F.relu(self.dec_fc2_bn(self.dec_fc2(z)))
+        h = F.relu(self.dec_fc3_bn(self.dec_fc3(z)))
         #use sigmoid if input is normalized to [0, 1]
-        return self.dec_fc3(h) #torch.sigmoid(self.fc3(h))  
+        return self.dec_fc4(h) #torch.sigmoid(self.fc3(h))  
 
     def forward(self, x):
 
@@ -314,7 +320,7 @@ class VAE_simple(nn.Module):
         #print('KLD: ',KLD)
         return BCE + KLD, BCE, KLD
 
-def train_vae_mnist(EPOCHS=30):
+def train_vae(EPOCHS=50):
     """
     Determine if any GPUs are available
     """
@@ -329,18 +335,6 @@ def train_vae_mnist(EPOCHS=30):
     num_epochs = EPOCHS
 
 
-    """
-    Create dataloaders to feed data into the neural network
-    Default MNIST dataset is used and standard train/test split is performed
-    """
-    '''
-    train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('data', train=True, download=True,
-                        transform=transforms.ToTensor()),
-        batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('data', train=False, transform=transforms.ToTensor()),
-        batch_size=1)'''
     # Split into train and validation
     dataset = VAE_adv_obs_dataset('multi_fgsm015_adversarial_obs_data.csv','multi_fgsm015_benign_obs_data.csv')#,transforms=transforms.ToTensor())
     val_fraction = 0.2
@@ -433,4 +427,4 @@ def train_vae_mnist(EPOCHS=30):
 
 
 if __name__ == '__main__':
-    train_vae_mnist()
+    train_vae()

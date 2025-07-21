@@ -28,15 +28,27 @@ from gymnasium import ObservationWrapper
 
 from defense_vae import VAE_3d, VAE_simple
 
+from ADVERSARIAL_CONFIGS import adversarial_cfg
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
-def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_defense=False,target_modality=None,collect_only_success=False, data_prefix='multi_fgsm015', max_steps_override=3000000):
+def main(cfg: DictConfig):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
     wandb_run = init_wandb(cfg)
     
+    adv_cfg = adversarial_cfg()
+    generate_dataset=adv_cfg.GENERATE_DATASET, 
+    defence_method=adv_cfg.DEF_METHOD
+    train_on_defense=adv_cfg.TRAIN_ON_DEF
+    target_modality=adv_cfg.TARGET_MODALITY
+    data_prefix=adv_cfg.DATA_PREFIX
+    max_steps_override=adv_cfg.MAX_STEPS_OVERRIDE
+    enable_attack=adv_cfg.ENABLE_ATTACK
+    save_path=adv_cfg.SAVE_PATH
+
     if(max_steps_override):
         cfg.max_step = max_steps_override
 
@@ -51,12 +63,12 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_
         print('CURRENT ENV TYPE: ', type(env))
         if(defence_method == 'VAE_3d'):
             def_model = VAE_3d()
-            def_model.load_state_dict(torch.load('/home/shayan/github/multimodal_mujoco_adversary/defence_vae.pth', weights_only=True))
+            def_model.load_state_dict(torch.load(save_path+'defence_vae.pth', weights_only=True))
             def_model.eval()
             def_model = def_model.to(device)
         if(defence_method == 'VAE'):
             def_model = VAE_simple()
-            def_model.load_state_dict(torch.load('/home/shayan/github/multimodal_mujoco_adversary/defence_vae.pth', weights_only=True))
+            def_model.load_state_dict(torch.load(save_path+'defence_vae.pth', weights_only=True))
             def_model.eval()
             def_model = def_model.to(device)
         else:
@@ -141,7 +153,8 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_
                     #Seperate standard observation from the perturbed one for data collection
                     adv_obs = adversary(agent,obs,target_modality=target_modality)
                     
-                else:
+                elif(enable_attack == True):
+                    #We can skip this line if attack is disabled otherwise
                     obs = adversary(agent,obs,target_modality=target_modality)
 
                 #Repeat data collection steps on adversarial data
@@ -243,9 +256,9 @@ def main(cfg: DictConfig, generate_dataset=False, defence_method='VAE',train_on_
         print('##############')
         print('Saving Dataset! ')
         benign_dataset_df = pd.DataFrame(benign_dataset)
-        benign_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/'+data_prefix+'_benign_obs_data.csv')
+        benign_dataset_df.to_csv(save_path+data_prefix+'_benign_obs_data.csv')
         adv_dataset_df = pd.DataFrame(adv_dataset)
-        adv_dataset_df.to_csv('/home/shayan/github/multimodal_mujoco_adversary/'+data_prefix+'_adversarial_obs_data.csv')
+        adv_dataset_df.to_csv(save_path+data_prefix+'_adversarial_obs_data.csv')
         print('Dataset Saved!')
         print('###############')
 
@@ -255,7 +268,7 @@ def adversary(actor, obs, target_modality=None):
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.015, target_modality=target_modality)
+    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
 
     return obs
 
@@ -380,4 +393,7 @@ class DefenceObsWrapper:
 
 
 if __name__ == '__main__':
+
+    adv_cfg = adversarial_cfg()
+
     main()
