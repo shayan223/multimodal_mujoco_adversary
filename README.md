@@ -14,7 +14,9 @@ This repository builds upon the original [DDiffPG](https://github.com/supersglzc
     - [:bulb: Training](#training)
     - [:bookmark: Baselines](#baselines)
     - [:floppy_disk: Saving and Loading](#saving-and-loading)
+    - [:notebook: Configuration and Dataset Instructions](#configuration-and-dataset-instructions)
 - [:wrench: Troubleshooting](#troubleshooting)
+- [:hammer_and_wrench: Customizing and Extending the Codebase](#customizing-and-extending-the-codebase)
 
 ---
 
@@ -47,10 +49,6 @@ This repository builds upon the original [DDiffPG](https://github.com/supersglzc
     ```bash
     pip install -e .
     ```
-
----
-
-## :scroll: Usage
 
 ---
 
@@ -104,6 +102,68 @@ These can be helpful for benchmarking and ablation studies.
 
 Checkpoints are automatically saved using W&B [Artifacts](https://docs.wandb.ai/ref/python/artifact).
 
+---
+
+### :notebook: Configuration and Dataset Instructions <a name="configuration-and-dataset-instructions"></a>
+
+#### ⚙️ Changing Test Settings
+All adversarial test configurations — including environment name, defense method, attack type, and more — can be edited in:
+
+```bash
+./scripts/ADVERSARIAL_CONFIGS.py
+```
+
+This is the main location for toggling and customizing your experiment setup.
+
+#### 📦 Dataset Generation
+To generate a dataset of environment observations, set the following flag in `ADVERSARIAL_CONFIGS.py`:
+
+```python
+GENERATE_DATASET = True
+```
+
+This will collect and store observations during the next run of the main script.
+
+> ⚠️ **Important:** After dataset generation, be sure to set `GENERATE_DATASET = False` again before running any other tests to avoid overwriting the dataset or corrupting results.
+
+---
+
+### 🧠 Using VAE for Defense
+
+To use the **VAE** defense mechanism:
+
+1. **Generate Dataset**  
+   Set `GENERATE_DATASET = True` in `ADVERSARIAL_CONFIGS.py`, then run the main script to collect observations:
+
+   ```bash
+   python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
+   ```
+
+2. **Train the VAE Model**  
+   Once the dataset is collected, train the VAE by running:
+
+   ```bash
+   python scripts/defense_vae.py
+   ```
+
+3. **Run with VAE Defense**  
+   After VAE training completes:
+   - Set `GENERATE_DATASET = False` in `ADVERSARIAL_CONFIGS.py`
+   - Change the selected defense method to `"VAE"`:
+
+     ```python
+     DEFENSE = "VAE"
+     ```
+
+   - Re-run the experiment:
+
+     ```bash
+     python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
+     ```
+
+> ⚠️ **Reminder:** Always keep `GENERATE_DATASET = False` during evaluation or VAE-inference runs.
+
+---
 
 ## :wrench: Troubleshooting
 
@@ -142,11 +202,6 @@ Then run:
 ```bash
 source ~/.bashrc
 ```
-
----
-
-Happy experimenting! Feel free to open issues or contribute improvements.
-
 
 ---
 
@@ -198,3 +253,4 @@ Ensure it:
 
 ---
 
+Happy experimenting! Feel free to open issues or contribute improvements.
