@@ -32,5 +32,5 @@ class adversarial_cfg():
 
         #directory to save vae model weights and dataset
         #Please end in '/' directory indicator
-        self.SAVE_PATH = '/home/shayan/github/multimodal_mujoco_adversary/'
+        self.SAVE_PATH = '/path/to/github/multimodal_mujoco_adversary/'
 
