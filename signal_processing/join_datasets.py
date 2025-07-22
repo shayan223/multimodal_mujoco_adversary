@@ -2,16 +2,16 @@ import pandas as pd
 import os 
 
 #Read in Adversarial Dataset
-adv_file = os.path.join(os.getcwd(), "signal_processing", "data", "mujoco_ant_obs_dataset", "only_success_500k", "multi_adversarial_obs_data.csv")
+adv_file = os.path.join(os.getcwd(), "mujoco_ant_obs_dataset", "velocity_500k", "veladversarial_obs_data.csv")
 adversarial_df = pd.read_csv(adv_file, header=0)
 
 #Read in Benign Dataset
-ben_file = os.path.join(os.getcwd(), "signal_processing","data", "mujoco_ant_obs_dataset", "only_success_500k", "multi_benign_obs_data.csv")
+ben_file = os.path.join(os.getcwd(), "mujoco_ant_obs_dataset", "velocity_500k", "velbenign_obs_data.csv" )
 benign_df = pd.read_csv(ben_file, header=0)
 
-# Drop the 'Unamed 0' Column
-adversarial_df = adversarial_df.drop(columns = 'Unnamed: 0', axis = 1)
-benign_df = benign_df.drop(columns = 'Unnamed: 0', axis = 1)
+# Drop the 'Unamed 0' Column because pandas automatically assigns indices
+adversarial_df = adversarial_df.drop(columns = 'Unnamed: 0')
+benign_df = benign_df.drop(columns = 'Unnamed: 0')
 
 # Add Labels
 adversarial_df['adversarial'] = 1
@@ -28,4 +28,4 @@ combined_df = pd.concat([adversarial_sampled,benign_sampled])
 
 # Save to file in data folder
 #combined_df.to_csv(os.path.join(os.getcwd(), "signal_processing","data", 'combined_labeled_obs_data.csv'))
-combined_df.to_csv(os.path.join(os.getcwd(), "signal_processing","data", 'multi_combined_sample.csv'))
+combined_df.to_csv(os.path.join(os.getcwd(), "signal_processing","dataset_samples", "combined_velocity_data_5000.csv"))

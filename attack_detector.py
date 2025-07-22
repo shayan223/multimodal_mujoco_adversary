@@ -10,6 +10,8 @@ import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import torchvision.models as models
+from sklearn.metrics import precision_score, recall_score, f1_score
+import os
 
 class adv_obs_dataset(Dataset):
     def __init__(self, csv_benign, csv_adversarial, transform=None, dtype=torch.float32):
@@ -21,8 +23,8 @@ class adv_obs_dataset(Dataset):
             dtype (torch.dtype): Desired dtype for the features.
         """
         # Load both datasets
-        data_benign = pd.read_csv(csv_benign).values
-        data_adv = pd.read_csv(csv_adversarial).values
+        data_benign = pd.read_csv(csv_benign, index_col=0).values
+        data_adv = pd.read_csv(csv_adversarial, index_col=0).values
 
         # Create labels
         labels_benign = np.zeros(len(data_benign), dtype=np.int64)
@@ -73,11 +75,11 @@ class adv_detector_nn(nn.Module):
         self.bn2 = nn.BatchNorm1d(256)
 
         # Layer 3
-        self.fc3 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 128)
         self.bn3 = nn.BatchNorm1d(256)
 
-        # Layer 5
-        self.fc3 = nn.Linear(256, 128)
+        # Layer 4
+        self.fc4 = nn.Linear(128, 128)
         self.bn3 = nn.BatchNorm1d(128)
 
         # Output layer
@@ -101,6 +103,10 @@ class adv_detector_nn(nn.Module):
         #x = self.bn3(x)
         x = F.relu(x)
         #x = self.dropout(x)
+
+        x = self.fc4(x)
+        #x = self.bn3(x)
+        x = F.relu(x)
 
 
         x = self.output(x)
@@ -133,9 +139,9 @@ class ResNet1D(nn.Module):
         x = x.unsqueeze(1)  # [B, 1, input_dim]
         return self.resnet(x)
 
-def train_adv_classifier(epochs=15,batch_size=64, lr=1e-3):
-
-    full_dataset = adv_obs_dataset("multi_fgsm015_adversarial_obs_data.csv", "multi_fgsm015_benign_obs_data.csv")
+def train_adv_classifier(epochs=10, batch_size=64, lr=1e-3):
+    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset','angular_500k')
+    full_dataset = adv_obs_dataset(f"{path}/adversarial_obs_data.csv", f"{path}/benign_obs_data.csv")
     input_dim = full_dataset.data.shape[1]
 
     # Split into train and val
@@ -177,6 +183,8 @@ def train_adv_classifier(epochs=15,batch_size=64, lr=1e-3):
 
     # Validation loop
     model.eval()
+    all_preds = []
+    all_labels = []
     correct = 0
     total = 0
     with torch.no_grad():
@@ -185,8 +193,14 @@ def train_adv_classifier(epochs=15,batch_size=64, lr=1e-3):
             predictions = (outputs > 0.5).long()
             correct += (predictions == batch_y).sum().item()
             total += batch_y.size(0)
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(batch_y.cpu().numpy())
     val_acc = correct / total
     print(f"Validation Accuracy: {100 * val_acc:.2f}%")
+    print(f"Precision: {precision_score(all_labels, all_preds):.4f}")
+    print(f"Recall: {recall_score(all_labels, all_preds):.4f}")
+    print(f"F1 Score: {f1_score(all_labels, all_preds):.4f}")
+
 
     torch.save({
         'epoch': epoch,

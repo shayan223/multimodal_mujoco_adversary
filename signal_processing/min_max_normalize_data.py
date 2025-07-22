@@ -4,8 +4,8 @@ import os
 from sklearn.preprocessing import MinMaxScaler
 
 
-filename = "multi_benign_obs_data"
-file_path = os.path.join(os.getcwd(), "signal_processing", "data", "mujoco_ant_obs_dataset/only_success_500k", f'{filename}.csv')
+filename = "combined_velocity_fgsm015_data_5000"
+file_path = os.path.join(os.getcwd(), "signal_processing", "dataset_samples", f'{filename}.csv')
 df = pd.read_csv(file_path)
 
 # Split into features and label
@@ -19,6 +19,6 @@ X = pd.DataFrame(MinMaxScaler().fit_transform(X))
 X['adversarial'] = y
 
 # Save to csv
-X.to_csv(os.path.join(os.getcwd(), "signal_processing","data", f'{filename}_normalized.csv'))
+X.to_csv(os.path.join(os.getcwd(), "signal_processing","dataset_samples", f'{filename}_normalized.csv'))
 
 

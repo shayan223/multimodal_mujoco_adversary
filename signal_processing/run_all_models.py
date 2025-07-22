@@ -5,7 +5,7 @@ from gmm_clustering import *
 from spectral_clustering import *
 import os
 
-filename = os.path.join(os.getcwd(), "signal_processing/dataset_samples/combined_velocity_fgsm015_data_5000.csv")
+filename = os.path.join(os.getcwd(), "signal_processing/dataset_samples/combined_velocity_fgsm015_data_5000_normalized.csv")
 # Set up results dictionaries
 classifier_results = {'Models': [], 'Accuracy': [], 'f1 score': [], 'precision': [], 'recall': []}
 
@@ -43,13 +43,14 @@ def run_all_models():
     classifier_results['recall'].append(recall)
     print(f"SVM Results recorded.")
 
+
     # Clustering models...
     print("Running KMeans Clustering...")
     kmeans_results = best_kmeans(filename)
     silhouette_score = kmeans_results.pop('silhouette_score')
     acc_score = kmeans_results.pop('accuracy')  
 
-    clustering_results['Models'].append('KMeans (2D PCA)')
+    clustering_results['Models'].append(kmeans_results['model'])
     clustering_results['Silhouette_score'].append(silhouette_score)
     clustering_results['Clustering Accuracy'].append(acc_score)
     print(f"KMeans Results recorded.")
@@ -59,7 +60,7 @@ def run_all_models():
     silhouette_score = gmm_results.pop('silhouette_score')
     acc_score = gmm_results.pop('accuracy') 
 
-    clustering_results['Models'].append('GMM (2D PCA)')
+    clustering_results['Models'].append(gmm_results['model'])
     clustering_results['Silhouette_score'].append(silhouette_score)
     clustering_results['Clustering Accuracy'].append(acc_score)
     print(f"GMM Results recorded.")
@@ -68,7 +69,7 @@ def run_all_models():
     spectral_results = best_spectral(filename)
     silhouette_score = spectral_results.pop('silhouette_score')
     acc_score = spectral_results.pop('accuracy')   
-    clustering_results['Models'].append('Spectral Clustering (3D PCA)')
+    clustering_results['Models'].append(spectral_results['model'])
     clustering_results['Silhouette_score'].append(silhouette_score)
     clustering_results['Clustering Accuracy'].append(acc_score)
     print(f"Spectral Clustering Results recorded.")
@@ -92,7 +93,7 @@ def check_results():
 
 def save_results():
     # Create new directory for dataset if it doesn't exist
-    directory_name = 'fgsm015'
+    directory_name = 'velocity_fsgm015'
 
     if not os.path.exists('signal_processing/best_models_results/' + directory_name):
         os.makedirs('signal_processing/best_models_results/' + directory_name)
@@ -102,14 +103,19 @@ def save_results():
 
     # Save classifier results
     classifier_df = pd.DataFrame(classifier_results)
-    classifier_df.to_csv(os.path.join(path,'classifier_results.csv'), index=False)
+    classifier_df.to_csv(os.path.join(path,'normalized_data_classifier_results.csv'), index=False)
 
     # Save clustering results
     clustering_df = pd.DataFrame(clustering_results)
-    clustering_df.to_csv(os.path.join(path, 'clustering_results.csv'), index=False)
+    clustering_df.to_csv(os.path.join(path, 'normalized_data_clustering_results.csv'), index=False)
 
-    print(f"Results saved to 'classifier_results.csv' and 'clustering_results.csv' in signal_processing/best_models_results/{directory_name}/.")
+    print(f"Results saved to 'normalized_data_classifier_results.csv' and 'normalized_data_clustering_results.csv' in signal_processing/best_models_results/{directory_name}/.")
+
+def debug():
+    df = pd.read_csv(filename)
+    print(df.head())
 if __name__ == "__main__":
+    # debug()
     run_all_models()
     check_results()
     save_results()

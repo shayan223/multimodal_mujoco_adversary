@@ -75,10 +75,11 @@ def main():
     # grid.fit(X_train,y_train)
     # print(grid.best_params_)
 
+    # Train and Evaluate OCSVM 
     # model, acc_score, class_label_predictions = train_test_OCSVM(X_train, X_test, y_train, y_test)
     # print(f"Accuracy Score: {acc_score}")
     # print(classification_report(y_test, class_label_predictions))
 
-    acc_score, label_predictions = train_test_svm(X_train, X_test, y_train, y_test)#, grid.best_params_['C'], grid.best_params_['gamma'])
+    acc_score, label_predictions = train_test_svm(X_train, X_test, y_train, y_test)
     print(classification_report(y_test, label_predictions))
     print(f"Accuracy Score: {acc_score}")

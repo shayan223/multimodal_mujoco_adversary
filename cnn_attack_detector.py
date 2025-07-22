@@ -71,11 +71,12 @@ class cnn_detector(nn.Module):
     def __init__(self):
         super(cnn_detector, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=2, kernel_size=2, stride=1) 
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=1, padding=0)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         # self.conv2 = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=2, stride=1)
         # self.pool2 = nn.MaxPool2d(kernel_size=2, stride=1, padding=0)
         self.flat = nn.Flatten()
-        self.fc1 = nn.Linear(32, 32) 
+        self.fc1 = nn.Linear(8,32) 
+        self.fc2 = nn.Linear(32,32) 
         self.output = nn.Linear(32,1)       
     def forward(self, x):
         x = self.conv1(x)
@@ -87,6 +88,8 @@ class cnn_detector(nn.Module):
         x = self.flat(x)  # Flatten the tensor
         x = self.fc1(x)
         x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
         x = self.output(x)
         x = F.sigmoid(x)
 
@@ -97,7 +100,7 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
 
     transform = transforms.ToTensor()
      
-    full_dataset = adv_obs_dataset("signal_processing/multi_fgsm015_adversarial_obs_data.csv", "signal_processing/multi_fgsm015_benign_obs_data.csv")
+    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/fgsm015_velocity/velocity_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/fgsm015_velocity/velocity_fgsm015_benign_obs_data.csv")
 
     # Split into train and val
     indices = list(range(len(full_dataset)))
@@ -142,12 +145,12 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
     val_acc = correct / total
     print(f"Validation Accuracy: {100 * val_acc:.2f}%")
 
-    torch.save({
-    'epoch': epoch,
-    'model_state_dict': model.state_dict(),
-    'optimizer_state_dict': optimizer.state_dict(),
-    'val_acc': val_acc,
-}, "best_model.pt")
+#     torch.save({
+#     'epoch': epoch,
+#     'model_state_dict': model.state_dict(),
+#     'optimizer_state_dict': optimizer.state_dict(),
+#     'val_acc': val_acc,
+# }) #"best_model.pt")
 
 def debugging():
     batch_size=64
