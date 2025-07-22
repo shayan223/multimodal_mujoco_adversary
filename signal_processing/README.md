@@ -16,7 +16,7 @@ This project involves exploring different detection methods for FGSM attacks on 
 ### Shallow Classifiers
 - **svm.py**
 - **knn_attack_detector.py**
-## Clustering Methods
+### Clustering Methods
 - **kmeans_attack_detector.py** 
 - **gmm_clustering.py**
 - **spectral_clustering.py**
