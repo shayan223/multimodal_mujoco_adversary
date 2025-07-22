@@ -1,5 +1,5 @@
-# KMeans and KNN as Adversarial Attack Classifiers
-Fit KMeans and K nearest neigbors to agent observation data to see if traditional signal processing techniques perform better detecting adversarial attacks.
+# Adversarial Attack Detection on Multimodal Reinforcement Learning (RL) Models
+This project involves exploring different detection methods for FGSM attacks on soft actor-critic. 
 
 ## Required Packages
 - Pandas 
@@ -9,6 +9,16 @@ Fit KMeans and K nearest neigbors to agent observation data to see if traditiona
 - scikit-learn
 
 ## Included Files
-- **kmeans_attack_detector.py** : Implements 3 KMeans models. Two with PCA applied to the data before fitting and one with LDA applied before fitting. 
-- **Knn_attack_detector.py**: Implements 2 KNN Models. One with no transformations applied, and one with PCA applied. 
-- **join_datasets.py**: Script used to label and join original adversarial and benign datasets. Joined data set saved to data/combined_labeled_obs_data.csv.
+### Data Pre-Processing and Metric Collection
+- **join_datasets.py**: Script used to label and join original adversarial and benign datasets. 
+- **min_max_normalize_data.py**: Normalizes a given DataFrame.
+- **run_all_models.py**: Runs all models for a given DataFrame and saves results to a specified destination. 
+### Shallow Classifiers
+- **svm.py**
+- **knn_attack_detector.py**
+## Clustering Methods
+- **kmeans_attack_detector.py** 
+- **gmm_clustering.py**
+- **spectral_clustering.py**
+
+
