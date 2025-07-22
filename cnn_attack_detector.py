@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import torchvision.models as models
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 class adv_obs_dataset(Dataset):
     def __init__(self, csv_benign, csv_adversarial, transform=None, dtype=torch.float32):
@@ -20,8 +21,8 @@ class adv_obs_dataset(Dataset):
             dtype (torch.dtype): Desired dtype for the features.
         """
         # Load both datasets
-        self.benign = pd.read_csv(csv_benign).values.astype(np.float32)
-        self.adv = pd.read_csv(csv_adversarial).values.astype(np.float32)
+        self.benign = pd.read_csv(csv_benign, index_col=0).values.astype(np.float32)
+        self.adv = pd.read_csv(csv_adversarial, index_col=0).values.astype(np.float32)
 
         # Create labels
         labels_benign = np.zeros(len(self.benign ), dtype=np.int64)
@@ -58,22 +59,22 @@ class adv_obs_dataset(Dataset):
             x = self.transform(x)
 
         x = torch.tensor(x, dtype=self.dtype)
-        y = torch.tensor(y, dtype=self.dtype)
-
+        # y = torch.tensor(y, dtype=self.dtype)
+        y = torch.tensor(y, dtype=torch.long)
         # Pad features to 36 elements, then reshape to 6x6
-        if x.numel() < 36:
-            x = torch.nn.functional.pad(x, (0, 36 - x.numel()))
-        x = x.view(6, 6) 
+        # if x.numel() < 36:
+        #     x = torch.nn.functional.pad(x, (0, 36 - x.numel()))
+        # x = x.view(6, 6) 
 
         return x, y
 
-class cnn_detector(nn.Module):
+# Instantiate CNN using 2d Convolutions
+class cnn_detector_2d(nn.Module):
     def __init__(self):
-        super(cnn_detector, self).__init__()
+        super(cnn_detector_2d, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=2, kernel_size=2, stride=1) 
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        # self.conv2 = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=2, stride=1)
-        # self.pool2 = nn.MaxPool2d(kernel_size=2, stride=1, padding=0)
+
         self.flat = nn.Flatten()
         self.fc1 = nn.Linear(8,32) 
         self.fc2 = nn.Linear(32,32) 
@@ -82,9 +83,6 @@ class cnn_detector(nn.Module):
         x = self.conv1(x)
         x = F.relu(x)
         x = self.pool1(x)  # Pooling layer
-        # x = self.conv2(x)
-        # x = F.relu(x)
-        # x = self.pool2(x)  # Pooling layer
         x = self.flat(x)  # Flatten the tensor
         x = self.fc1(x)
         x = F.relu(x)
@@ -95,12 +93,35 @@ class cnn_detector(nn.Module):
 
         return x
     
+# Instantiate CNN using 1d Convolutions 
+class cnn_detector_1d(nn.Module):
+    def __init__(self):
+        super(cnn_detector_1d, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=3, kernel_size=3, stride=1) 
+        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
+        self.flat = nn.Flatten()
+        self.fc1 = nn.Linear(39,32) 
+        self.fc2 = nn.Linear(32,32)
+        self.output = nn.Linear(32,1)       
+    def forward(self, x):
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.pool1(x) 
+        x = self.flat(x) 
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.output(x)
+        x = F.sigmoid(x)
 
+        return x
+        
 def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
 
     transform = transforms.ToTensor()
      
-    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/fgsm015_velocity/velocity_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/fgsm015_velocity/velocity_fgsm015_benign_obs_data.csv")
+    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/adversarial_obs_data.csv", "mujoco_ant_obs_dataset/benign_obs_data.csv")
 
     # Split into train and val
     indices = list(range(len(full_dataset)))
@@ -113,7 +134,7 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
     val_loader = DataLoader(val_subset, batch_size=batch_size)
 
     # Model, loss, optimizer
-    model = cnn_detector()
+    model = cnn_detector_1d()
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -122,10 +143,9 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
         model.train()
         total_loss = 0
         for batch_x, batch_y in tqdm(train_loader):
-        
             optimizer.zero_grad() # zero the gradients
-
             outputs = model(batch_x.unsqueeze(1))  # Add channel dimension
+            # outputs = model(batch_x).squeeze(1)
             loss = criterion(outputs, batch_y.float())
             loss.backward()
             optimizer.step()
@@ -134,16 +154,26 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
 
     # Validation loop
     model.eval()
+    # all_preds = []
+    # all_labels = []
     correct = 0
     total = 0   
     with torch.no_grad():
         for batch_x, batch_y in tqdm(val_loader):
-            outputs = model(batch_x.unsqueeze(1))#.squeeze(1)
+            outputs = model(batch_x.unsqueeze(1))
+            # outputs= model(batch_x).squeeze(1)
             predictions = (outputs > 0.5).long()
             correct += (predictions == batch_y).sum().item()
+            # all_preds.extend(predictions.cpu().numpy())
+            # all_labels.extend(batch_y.cpu().numpy())
             total += batch_y.size(0)
     val_acc = correct / total
     print(f"Validation Accuracy: {100 * val_acc:.2f}%")
+
+    # print(f"Precision: {precision_score(all_labels, all_preds):.4f}")
+    # print(f"Recall: {recall_score(all_labels, all_preds):.4f}")
+    # print(f"F1 Score: {f1_score(all_labels, all_preds):.4f}")
+
 
 #     torch.save({
 #     'epoch': epoch,
@@ -155,7 +185,7 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
 def debugging():
     batch_size=64
 
-    full_dataset = adv_obs_dataset("signal_processing/multi_fgsm015_adversarial_obs_data.csv", "signal_processing/multi_fgsm015_benign_obs_data.csv")
+    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular/angular_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular/angular_fgsm015_benign_obs_data.csv")
 
     # Split into train and val
     indices = list(range(len(full_dataset)))
@@ -168,7 +198,7 @@ def debugging():
     val_loader = DataLoader(val_subset, batch_size=batch_size)
 
     example_x, example_y = next(iter(train_loader))
-    print("x:", example_x[0].view(example_x[0].size(0), -1).shape)
+    print("x:", example_x[0].shape, "y:", example_y[0].squeeze().size())
 
 if __name__ == "__main__":
     train_adv_cnn_classifier()
