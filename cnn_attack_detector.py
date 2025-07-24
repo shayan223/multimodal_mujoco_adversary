@@ -74,7 +74,6 @@ class cnn_detector_2d(nn.Module):
         super(cnn_detector_2d, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=2, kernel_size=2, stride=1) 
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-
         self.flat = nn.Flatten()
         self.fc1 = nn.Linear(8,32) 
         self.fc2 = nn.Linear(32,32) 
@@ -97,21 +96,46 @@ class cnn_detector_2d(nn.Module):
 class cnn_detector_1d(nn.Module):
     def __init__(self):
         super(cnn_detector_1d, self).__init__()
+        self.input_bn = nn.BatchNorm1d(1)
+
         self.conv1 = nn.Conv1d(in_channels=1, out_channels=3, kernel_size=3, stride=1) 
+        self.conv1_bn = nn.BatchNorm1d(3)
+
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
+        self.pool1_bn = nn.BatchNorm1d(3)
+
         self.flat = nn.Flatten()
+        self.flat_bn = nn.BatchNorm1d(39)
+
         self.fc1 = nn.Linear(39,32) 
+        self.fc1_bn= nn.BatchNorm1d(32)
+
         self.fc2 = nn.Linear(32,32)
-        self.output = nn.Linear(32,1)       
+        self.fc2_bn = nn.BatchNorm1d(32)
+
+        self.output=nn.Linear(32,1)      
+ 
     def forward(self, x):
+        x = self.input_bn(x)
+
         x = self.conv1(x)
+        x = self.conv1_bn(x)
         x = F.relu(x)
+
         x = self.pool1(x) 
+        x = self.pool1_bn(x)
+
         x = self.flat(x) 
+        x = self.flat_bn(x)
+
         x = self.fc1(x)
+        x = self.fc1_bn(x)
         x = F.relu(x)
+
         x = self.fc2(x)
+        x = self.fc2_bn(x)
         x = F.relu(x)
+
         x = self.output(x)
         x = F.sigmoid(x)
 
@@ -145,7 +169,6 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
         for batch_x, batch_y in tqdm(train_loader):
             optimizer.zero_grad() # zero the gradients
             outputs = model(batch_x.unsqueeze(1))  # Add channel dimension
-            # outputs = model(batch_x).squeeze(1)
             loss = criterion(outputs, batch_y.float())
             loss.backward()
             optimizer.step()
@@ -161,7 +184,6 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
     with torch.no_grad():
         for batch_x, batch_y in tqdm(val_loader):
             outputs = model(batch_x.unsqueeze(1))
-            # outputs= model(batch_x).squeeze(1)
             predictions = (outputs > 0.5).long()
             correct += (predictions == batch_y).sum().item()
             # all_preds.extend(predictions.cpu().numpy())
