@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import torchvision.models as models
 from sklearn.metrics import precision_score, recall_score, f1_score
+import os
 
 class adv_obs_dataset(Dataset):
     def __init__(self, csv_benign, csv_adversarial, transform=None, dtype=torch.float32):
@@ -108,7 +109,7 @@ class cnn_detector_1d(nn.Module):
         self.flat_bn = nn.BatchNorm1d(39)
 
         self.fc1 = nn.Linear(39,32) 
-        self.fc1_bn= nn.BatchNorm1d(32)
+        self.fc1_bn = nn.BatchNorm1d(32)
 
         self.fc2 = nn.Linear(32,32)
         self.fc2_bn = nn.BatchNorm1d(32)
@@ -122,11 +123,10 @@ class cnn_detector_1d(nn.Module):
         x = self.conv1_bn(x)
         x = F.relu(x)
 
-        x = self.pool1(x) 
+        x = self.pool1(x)
         x = self.pool1_bn(x)
 
         x = self.flat(x) 
-        x = self.flat_bn(x)
 
         x = self.fc1(x)
         x = self.fc1_bn(x)
@@ -141,11 +141,11 @@ class cnn_detector_1d(nn.Module):
 
         return x
         
-def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
+def train_adv_cnn_classifier(epochs=60, batch_size=64, learning_rate=0.001):
 
     transform = transforms.ToTensor()
      
-    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/adversarial_obs_data.csv", "mujoco_ant_obs_dataset/benign_obs_data.csv")
+    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/multi_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/multi_fgsm015_benign_obs_data.csv")
 
     # Split into train and val
     indices = list(range(len(full_dataset)))
@@ -177,8 +177,8 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
 
     # Validation loop
     model.eval()
-    # all_preds = []
-    # all_labels = []
+    all_preds = []
+    all_labels = []
     correct = 0
     total = 0   
     with torch.no_grad():
@@ -186,42 +186,64 @@ def train_adv_cnn_classifier(epochs=10, batch_size=64, learning_rate=0.001):
             outputs = model(batch_x.unsqueeze(1))
             predictions = (outputs > 0.5).long()
             correct += (predictions == batch_y).sum().item()
-            # all_preds.extend(predictions.cpu().numpy())
-            # all_labels.extend(batch_y.cpu().numpy())
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(batch_y.cpu().numpy())
             total += batch_y.size(0)
     val_acc = correct / total
     print(f"Validation Accuracy: {100 * val_acc:.2f}%")
+    print(f"Precision: {precision_score(all_labels, all_preds):.4f}")
+    print(f"Recall: {recall_score(all_labels, all_preds):.4f}")
+    print(f"F1 Score: {f1_score(all_labels, all_preds):.4f}")
 
-    # print(f"Precision: {precision_score(all_labels, all_preds):.4f}")
-    # print(f"Recall: {recall_score(all_labels, all_preds):.4f}")
-    # print(f"F1 Score: {f1_score(all_labels, all_preds):.4f}")
 
+    torch.save({
+    'epoch': epoch,
+    'model_state_dict': model.state_dict(),
+    'optimizer_state_dict': optimizer.state_dict(),
+    'val_acc': val_acc,
+    }, "best_cnn_model_015.pt")
 
-#     torch.save({
-#     'epoch': epoch,
-#     'model_state_dict': model.state_dict(),
-#     'optimizer_state_dict': optimizer.state_dict(),
-#     'val_acc': val_acc,
-# }) #"best_model.pt")
+def load_test_model():
+    # Load data 
+    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset')
+    full_dataset = adv_obs_dataset(f"{path}/adversarial_obs_data.csv", f"{path}/benign_obs_data.csv")
+    input_dim = full_dataset.data.shape[1]
 
-def debugging():
-    batch_size=64
-
-    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular/angular_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular/angular_fgsm015_benign_obs_data.csv")
-
-    # Split into train and val
+    # Split into train and val, set up test loader
     indices = list(range(len(full_dataset)))
-    train_indices, val_indices = train_test_split(indices, test_size=0.2, random_state=42)
-
-    train_subset = torch.utils.data.Subset(full_dataset, train_indices)
+    train_indices, val_indices = train_test_split(indices, test_size=0.2, random_state=12)
     val_subset = torch.utils.data.Subset(full_dataset, val_indices)
+    val_loader = DataLoader(val_subset, batch_size=64)
 
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_subset, batch_size=batch_size)
+    # Initialize Model 
+    checkpoint = torch.load("best_cnn_model.pt")
+    model = cnn_detector_1d()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    example_x, example_y = next(iter(train_loader))
-    print("x:", example_x[0].shape, "y:", example_y[0].squeeze().size())
+    # Load states 
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    # Validation loop
+    model.eval()
+    all_preds = []
+    all_labels = []
+    correct = 0
+    total = 0   
+    with torch.no_grad():
+        for batch_x, batch_y in tqdm(val_loader):
+            outputs = model(batch_x.unsqueeze(1))
+            predictions = (outputs > 0.5).long()
+            correct += (predictions == batch_y).sum().item()
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(batch_y.cpu().numpy())
+            total += batch_y.size(0)
+    val_acc = correct / total
+    print(f"Validation Accuracy: {100 * val_acc:.2f}%")
+    print(f"Precision: {precision_score(all_labels, all_preds):.4f}")
+    print(f"Recall: {recall_score(all_labels, all_preds):.4f}")
+    print(f"F1 Score: {f1_score(all_labels, all_preds):.4f}")
 
 if __name__ == "__main__":
     train_adv_cnn_classifier()
-    # debugging()
+    load_test_model()
