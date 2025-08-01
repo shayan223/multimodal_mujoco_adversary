@@ -7,12 +7,12 @@ class adversarial_cfg():
         self.ENABLE_ATTACK = True
 
         #Turns on dataset collection mode
-        self.GENERATE_DATASET = False
+        self.GENERATE_DATASET = True
         #Prefix for file name to save the dataset you generate
         self.DATA_PREFIX = 'fgsm007'
 
         #Select Defense method, current options are 'VAE', 'VAE_3d', 'Gaussian', and None
-        self.DEF_METHOD = 'VAE'
+        self.DEF_METHOD = 'Gaussian'
 
         #Set to True if you want to apply defense modifications to the agent's observation during training
         #Set to False to only make changes to the observation during evaluation
@@ -33,4 +33,14 @@ class adversarial_cfg():
         #directory to save vae model weights and dataset
         #Please end in '/' directory indicator
         self.SAVE_PATH = '/path/to/github/multimodal_mujoco_adversary/'
+
+        if(self.SAVE_PATH == '/path/to/github/multimodal_mujoco_adversary/'):
+            print('#####################')
+            print('WARNING: SAVE_PATH not set. Set it to absolute path to the repository directory. Please update it in scripts/ADVERSARIAL_CONFIGS.py')
+            print('#####################')
+        if(self.SAVE_PATH[-1] != '/'):
+            print('#####################')
+            print('WARNING: File Path does not end with "/". adding one for you. Please double check its correctness.')
+            self.SAVE_PATH.append('/')
+            print('#####################')
 
