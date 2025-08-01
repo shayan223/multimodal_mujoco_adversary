@@ -40,7 +40,7 @@ def main(cfg: DictConfig):
     wandb_run = init_wandb(cfg)
     
     adv_cfg = adversarial_cfg()
-    generate_dataset=adv_cfg.GENERATE_DATASET, 
+    generate_dataset=adv_cfg.GENERATE_DATASET
     defence_method=adv_cfg.DEF_METHOD
     train_on_defense=adv_cfg.TRAIN_ON_DEF
     target_modality=adv_cfg.TARGET_MODALITY
@@ -189,17 +189,16 @@ def main(cfg: DictConfig):
 
             ret_mean = return_tracker.mean()
 
-            
             if(generate_dataset == True):
                 #If we only want to collect successfull attacks
-                if(collect_only_success == True):
+                '''if(collect_only_success == True):
                     if(global_steps > 1.5e6 and ret_mean < 2):
                         print("Sucessfull attack, saving data!")
                         #extend dataset to include new values, rather than nesting lists
                         benign_dataset.extend(dataset_buffer)
-                        adv_dataset.extend(dataset_adv_buffer)
+                        adv_dataset.extend(dataset_adv_buffer)'''
                 #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
-                elif(global_steps > 1.5e6):  #if(ret_mean > 0):
+                if(global_steps > 1.5e6):  #if(ret_mean > 0):
                     print("Sucessfull episode, saving data!")
                     #extend dataset to include new values, rather than nesting lists
                     benign_dataset.extend(dataset_buffer)
