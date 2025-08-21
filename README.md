@@ -157,7 +157,7 @@ To use the **VAE** defense mechanism:
 
    - Re-run the experiment:
 
-         ```bash
+    ```bash
     python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
     ```
 
