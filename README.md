@@ -157,11 +157,15 @@ To use the **VAE** defense mechanism:
 
    - Re-run the experiment:
 
-     ```bash
-     python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
-     ```
+         ```bash
+    python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
+    ```
 
 > ⚠️ **Reminder:** Always keep `GENERATE_DATASET = False` during evaluation or VAE-inference runs.
+
+### Adversarial Detection
+
+Go to the `./signal_processing` directory for directions to run the detection methods.
 
 ---
 
