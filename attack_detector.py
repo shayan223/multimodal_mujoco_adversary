@@ -113,9 +113,7 @@ class adv_detector_nn(nn.Module):
         x = self.output(x)
         x = torch.sigmoid(x)  # Or remove this if using BCEWithLogitsLoss
         return x
-
-
-
+    
 class ResNet1D(nn.Module):
     def __init__(self, base_model, input_dim, output_dim):
         super().__init__()
@@ -141,8 +139,8 @@ class ResNet1D(nn.Module):
         return self.resnet(x)
         
 def train_adv_classifier(epochs=60, batch_size=64, lr=1e-3):
-    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset')
-    full_dataset = adv_obs_dataset(f"{path}/adversarial_obs_data.csv", f"{path}/benign_obs_data.csv")
+    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular')
+    full_dataset = adv_obs_dataset(f"{path}/angular_fgsm015_adversarial_obs_data.csv", f"{path}/angular_fgsm015_benign_obs_data.csv")
     input_dim = full_dataset.data.shape[1]
 
     # Split into train and val
@@ -207,12 +205,12 @@ def train_adv_classifier(epochs=60, batch_size=64, lr=1e-3):
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'val_acc': val_acc,
-    }, "best_model.pt")
+    }, "nn_model_angular_015.pt")
 
 def load_test_model():
     # Load data 
-    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset')
-    full_dataset = adv_obs_dataset(f"{path}/adversarial_obs_data.csv", f"{path}/benign_obs_data.csv")
+    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular')
+    full_dataset = adv_obs_dataset(f"{path}/angular_fgsm015_adversarial_obs_data.csv", f"{path}/angular_fgsm015_benign_obs_data.csv")
     input_dim = full_dataset.data.shape[1]
 
     # Split into train and val, set up test loader
@@ -222,7 +220,7 @@ def load_test_model():
     val_loader = DataLoader(val_subset, batch_size=64)
 
     # Initialize Model 
-    checkpoint = torch.load("best_model.pt")
+    checkpoint = torch.load("nn_model_angular_015.pt")
     model = adv_detector_nn(input_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 

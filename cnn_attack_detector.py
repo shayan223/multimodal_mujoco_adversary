@@ -62,6 +62,7 @@ class adv_obs_dataset(Dataset):
         x = torch.tensor(x, dtype=self.dtype)
         # y = torch.tensor(y, dtype=self.dtype)
         y = torch.tensor(y, dtype=torch.long)
+
         # Pad features to 36 elements, then reshape to 6x6
         # if x.numel() < 36:
         #     x = torch.nn.functional.pad(x, (0, 36 - x.numel()))
@@ -69,7 +70,7 @@ class adv_obs_dataset(Dataset):
 
         return x, y
 
-# Instantiate CNN using 2d Convolutions
+# Instantiate CNN with 2d Convolutions
 class cnn_detector_2d(nn.Module):
     def __init__(self):
         super(cnn_detector_2d, self).__init__()
@@ -93,47 +94,48 @@ class cnn_detector_2d(nn.Module):
 
         return x
     
-# Instantiate CNN using 1d Convolutions 
+# Instantiate CNN with 1d Convolutions 
 class cnn_detector_1d(nn.Module):
     def __init__(self):
         super(cnn_detector_1d, self).__init__()
-        self.input_bn = nn.BatchNorm1d(1)
+        # self.input_bn = nn.BatchNorm1d(1) 
 
         self.conv1 = nn.Conv1d(in_channels=1, out_channels=3, kernel_size=3, stride=1) 
-        self.conv1_bn = nn.BatchNorm1d(3)
+        # self.conv1_bn = nn.BatchNorm1d(3)
 
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-        self.pool1_bn = nn.BatchNorm1d(3)
+        # self.pool1_bn = nn.BatchNorm1d(3)
 
         self.flat = nn.Flatten()
-        self.flat_bn = nn.BatchNorm1d(39)
+        # self.flat_bn = nn.BatchNorm1d(39)
 
         self.fc1 = nn.Linear(39,32) 
-        self.fc1_bn = nn.BatchNorm1d(32)
+        # self.fc1_bn = nn.BatchNorm1d(32)
 
         self.fc2 = nn.Linear(32,32)
-        self.fc2_bn = nn.BatchNorm1d(32)
+        # self.fc2_bn = nn.BatchNorm1d(32)
 
         self.output=nn.Linear(32,1)      
  
     def forward(self, x):
-        x = self.input_bn(x)
+        # x = self.input_bn(x)
 
         x = self.conv1(x)
-        x = self.conv1_bn(x)
+        # x = self.conv1_bn(x)
         x = F.relu(x)
 
         x = self.pool1(x)
-        x = self.pool1_bn(x)
+        # x = self.pool1_bn(x)
 
         x = self.flat(x) 
+        # x = self.flat_bn(x)
 
         x = self.fc1(x)
-        x = self.fc1_bn(x)
+        # x = self.fc1_bn(x)
         x = F.relu(x)
 
         x = self.fc2(x)
-        x = self.fc2_bn(x)
+        # x = self.fc2_bn(x)
         x = F.relu(x)
 
         x = self.output(x)
@@ -145,7 +147,7 @@ def train_adv_cnn_classifier(epochs=60, batch_size=64, learning_rate=0.001):
 
     transform = transforms.ToTensor()
      
-    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/multi_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/multi_fgsm015_benign_obs_data.csv")
+    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular/angular_fgsm015_adversarial_obs_data.csv", "mujoco_ant_obs_dataset/fgsm015_data/fgsm015_angular/angular_fgsm015_benign_obs_data.csv")
 
     # Split into train and val
     indices = list(range(len(full_dataset)))
@@ -201,22 +203,23 @@ def train_adv_cnn_classifier(epochs=60, batch_size=64, learning_rate=0.001):
     'model_state_dict': model.state_dict(),
     'optimizer_state_dict': optimizer.state_dict(),
     'val_acc': val_acc,
-    }, "best_cnn_model_015.pt")
+    }, "trained_models/cnn_angular_015.pt")
 
 def load_test_model():
-    # Load data 
-    path = os.path.join(os.getcwd(), 'mujoco_ant_obs_dataset')
-    full_dataset = adv_obs_dataset(f"{path}/adversarial_obs_data.csv", f"{path}/benign_obs_data.csv")
+    # Load data
+    full_dataset = adv_obs_dataset("mujoco_ant_obs_dataset/angular_500k/adversarial_obs_data.csv", "mujoco_ant_obs_dataset/angular_500k/benign_obs_data.csv")
+
+
     input_dim = full_dataset.data.shape[1]
 
     # Split into train and val, set up test loader
     indices = list(range(len(full_dataset)))
-    train_indices, val_indices = train_test_split(indices, test_size=0.2, random_state=12)
+    _ , val_indices = train_test_split(indices, test_size=0.2, random_state=12)
     val_subset = torch.utils.data.Subset(full_dataset, val_indices)
     val_loader = DataLoader(val_subset, batch_size=64)
 
     # Initialize Model 
-    checkpoint = torch.load("best_cnn_model.pt")
+    checkpoint = torch.load("trained_models/cnn_angular_007.pt")
     model = cnn_detector_1d()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
@@ -245,5 +248,6 @@ def load_test_model():
     print(f"F1 Score: {f1_score(all_labels, all_preds):.4f}")
 
 if __name__ == "__main__":
-    train_adv_cnn_classifier()
-    load_test_model()
+    # train_adv_cnn_classifier()
+    for i in range(3):
+     load_test_model()

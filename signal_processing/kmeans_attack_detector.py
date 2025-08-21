@@ -31,7 +31,6 @@ def LDA_transform_features(n_comp, features, label):
 
     return transformed_data
 
-# Fit the best KMeans model and return silhouette score and accuracy
 def best_kmeans(file):
     df = pd.read_csv(file)
     df = df.drop(columns='Unnamed: 0') # Ensure this column is dropped if it exists
@@ -43,41 +42,41 @@ def best_kmeans(file):
     # Store results for each model
     models = []
 
-    # 2D PCA Model
-    X_pca_2 = pca_transform_features(n_comp=2, features=X)
-    s_score_2, clusters_2, centroids_2 = fit_kmeans(X_pca_2)
-    acc_score_2 = accuracy_score(y, clusters_2)
-    models.append({
-        'model': 'KMeans (2D PCA)',
-        'silhouette_score': s_score_2,
-        'accuracy': acc_score_2,
-        'clusters': clusters_2,
-        'centroids': centroids_2
-    })
-
-    # 3D PCA Model
-    X_pca_3 = pca_transform_features(n_comp=3, features=X)
-    s_score_3, clusters_3, centroids_3 = fit_kmeans(X_pca_3)
-    acc_score_3 = accuracy_score(y, clusters_3)
-    models.append({
-        'model': 'KMeans (3D PCA)',
-        'silhouette_score': s_score_3,
-        'accuracy': acc_score_3,
-        'clusters': clusters_3,
-        'centroids': centroids_3
-    })
-
-    # # LDA Model
-    # X_lda = LDA_transform_features(n_comp=1, features=X, label=y)
-    # s_score_lda, clusters_lda, centroids_lda = fit_kmeans(X_lda)
-    # acc_score_lda = accuracy_score(y, clusters_lda)
+    # # 2D PCA Model
+    # X_pca_2 = pca_transform_features(n_comp=2, features=X)
+    # s_score_2, clusters_2, centroids_2 = fit_kmeans(X_pca_2)
+    # acc_score_2 = accuracy_score(y, clusters_2)
     # models.append({
-    #     'model': 'KMeans (LDA)',
-    #     'silhouette_score': s_score_lda,
-    #     'accuracy': acc_score_lda,
-    #     'clusters': clusters_lda,
-    #     'centroids': centroids_lda
+    #     'model': 'KMeans (2D PCA)',
+    #     'silhouette_score': s_score_2,
+    #     'accuracy': acc_score_2,
+    #     'clusters': clusters_2,
+    #     'centroids': centroids_2
     # })
+
+    # # 3D PCA Model
+    # X_pca_3 = pca_transform_features(n_comp=3, features=X)
+    # s_score_3, clusters_3, centroids_3 = fit_kmeans(X_pca_3)
+    # acc_score_3 = accuracy_score(y, clusters_3)
+    # models.append({
+    #     'model': 'KMeans (3D PCA)',
+    #     'silhouette_score': s_score_3,
+    #     'accuracy': acc_score_3,
+    #     'clusters': clusters_3,
+    #     'centroids': centroids_3
+    # })
+
+    # LDA Model
+    X_lda = LDA_transform_features(n_comp=1, features=X, label=y)
+    s_score_lda, clusters_lda, centroids_lda = fit_kmeans(X_lda)
+    acc_score_lda = accuracy_score(y, clusters_lda)
+    models.append({
+        'model': 'KMeans (LDA)',
+        'silhouette_score': s_score_lda,
+        'accuracy': acc_score_lda,
+        'clusters': clusters_lda,
+        'centroids': centroids_lda
+    })
 
     # Select the model with the highest accuracy
     best_model = max(models, key=lambda m: m['accuracy'])
@@ -182,8 +181,6 @@ def main():
     ax.set(title = f'KMeans Clustering with LDA (1 Component)\nSilhouette Score: {round(s_score, 4)} \nAccuracy Score: {round(acc_score, 4):.2%}')
     plt.show()
 
-
-
 if __name__ == "__main__":
     # main()
-    print(best_kmeans(os.path.join(os.getcwd(), "signal_processing/dataset_samples/combined_obs_data_5000.csv")))
+    print(best_kmeans(os.path.join(os.getcwd(), "signal_processing/dataset_samples/combined_velocity_fgsm015_data_5000.csv")))
