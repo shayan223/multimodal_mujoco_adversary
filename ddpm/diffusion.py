@@ -338,8 +338,8 @@ class DenoiseDiffusion:
         return torch.sqrt(F.mse_loss(x0_reconst,x0)+ch_eps)#+F.mse_loss(noise, eps_theta)
     
 
-
-    def adv_denoiseing_loss(self, x0: torch.Tensor, noise: Optional[torch.Tensor] = None, base_t=None):
+    #NOTE: x0 is now adversarial data
+    def adv_denoiseing_loss(self, x0: torch.Tensor, noise: Optional[torch.Tensor] = None, base_t=None, benign_x: torch.Tensor = None):
         """
         #### loss targeting denoising rather than generative diffusion objective
         Source: https://arxiv.org/pdf/2305.04457.pdf
@@ -357,9 +357,9 @@ class DenoiseDiffusion:
         x0_reconst = self.eps_model(xt,t)
         # charbonnier loss
         ch_eps = 0.001 ** 2 #Not our noise epsilon, but our charbonnier coeficient
-        #TODO do i combine this with the original mse_loss?
-        return x0_reconst, torch.sqrt(F.mse_loss(x0_reconst,x0)+ch_eps)#+F.mse_loss(noise, eps_theta)
-    
+
+        #return x0_reconst, torch.sqrt(F.mse_loss(x0_reconst,x0)+ch_eps)#+F.mse_loss(noise, eps_theta)
+        return x0_reconst, torch.sqrt(F.mse_loss(x0_reconst,benign_x)+ch_eps)
 
 
     #TODO
