@@ -15,6 +15,7 @@ import numpy as np
 from torch.utils.data import Dataset
 
 from ddpm.unet import UNet
+from ddpm.unet_1d import UNet1D
 from ddpm.diffusion import DenoiseDiffusion
 
 
@@ -71,8 +72,8 @@ class sensor_diffusion_dataset(Dataset):
         
         # Reshape 1D sensor data to 2D for UNet: [sensor_dim] -> [1, 1, 1, sensor_dim]
         # This creates a "1D image" that UNet can process
-        sample = sample.unsqueeze(0).unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
-        target = target.unsqueeze(0).unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
+        sample = sample.unsqueeze(0)#.unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
+        target = target.unsqueeze(0)#.unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
         print(sample.shape)
         print(target.shape)
 
@@ -254,8 +255,8 @@ class Diffusion_model():
             # Create model now that we know the sensor dimension
             
 
-            self.eps_model = UNet(
-                image_channels=self.image_channels,
+            self.eps_model = UNet1D(
+                input_channels=self.image_channels,
                 n_channels=self.n_channels,
                 ch_mults=self.channel_multipliers,
                 is_attn=self.is_attention,
