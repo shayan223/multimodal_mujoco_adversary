@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 
 from ddpm.unet import UNet
 from ddpm.unet_1d import UNet1D
+from ddpm.unet_1d_V2 import UNet1D_V2
 from ddpm.diffusion import DenoiseDiffusion
 
 
@@ -70,6 +71,12 @@ class sensor_diffusion_dataset(Dataset):
         sample = torch.tensor(sample, dtype=self.dtype)
         target = torch.tensor(target, dtype=self.dtype)
         
+        # Pad from 29 to 32 dimensions by adding zeros at the end
+        if sample.shape[0] == 29:
+            sample = torch.cat([sample, torch.zeros(3, dtype=self.dtype)], dim=0)
+        if target.shape[0] == 29:
+            target = torch.cat([target, torch.zeros(3, dtype=self.dtype)], dim=0)
+        
         # Reshape 1D sensor data to 2D for UNet: [sensor_dim] -> [1, 1, 1, sensor_dim]
         # This creates a "1D image" that UNet can process
         sample = sample.unsqueeze(0)#.unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
@@ -105,6 +112,8 @@ class Diffusion_model():
         self.image_channels = 1  # Single channel for sensor data
         # Sensor data dimensions (will be determined from CSV)
         self.sensor_dim = None  # Will be set when loading data
+        # Original sensor dimension before padding
+        self.original_sensor_dim = 29  # Original dimension before padding to 32
         # Number of channels in the initial feature map
         self.n_channels = 32
         # The list of channel numbers at each resolution.
@@ -250,18 +259,25 @@ class Diffusion_model():
         if len(dataset) > 0:
             sample_data, _ = dataset[0]
             self.sensor_dim = sample_data.shape[0]
-            print(f"Sensor data dimension: {self.sensor_dim}")
+            print(f"Padded sensor data dimension: {self.sensor_dim}")
+            print(f"Original sensor data dimension: {self.original_sensor_dim}")
             
             # Create model now that we know the sensor dimension
-            
-
+            # Use padded dimension (32) for model input/output
             self.eps_model = UNet1D(
                 input_channels=self.image_channels,
                 n_channels=self.n_channels,
                 ch_mults=self.channel_multipliers,
                 is_attn=self.is_attention,
                 ).to(self.device)
-
+            '''
+            self.eps_model = UNet1D_V2(
+                input_channels=self.image_channels,
+                n_channels=self.n_channels,
+                ch_mults=self.channel_multipliers,
+                is_attn=self.is_attention,
+                ).to(self.device)
+            ''' 
             # Create [DDPM class](index.html)
             self.diffusion = DenoiseDiffusion(
                 eps_model=self.eps_model,

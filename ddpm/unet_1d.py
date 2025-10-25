@@ -26,7 +26,7 @@ import torch
 from torch import nn
 
 from labml_helpers.module import Module
-
+from torch.nn import functional as F
 
 class Swish(Module):
     """
@@ -279,8 +279,7 @@ class MiddleBlock(Module):
         x = self.attn(x)
         x = self.res2(x, t)
         return x
-
-
+'''
 class Upsample(nn.Module):
     """
     ### Scale up the feature map by $2 \times$
@@ -334,7 +333,135 @@ class Downsample(nn.Module):
         
         # Reshape back to [batch_size, n_channels, length//2]
         return h.permute(0, 2, 1)
+'''
+'''
+class Upsample(nn.Module):
+    """
+    ### Scale up the feature map by 2x using interpolate (handles odd lengths robustly)
+    """
+    def __init__(self, n_channels):
+        super().__init__()
+        # map each position's channel vector to a vector with twice the channels
+        self.linear = nn.Linear(n_channels, n_channels * 2)
 
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        # x: [batch, n_channels, length]
+        _ = t  # kept for signature compatibility
+
+        # Apply linear per-position: change to [batch, length, channels]
+        x_reshaped = x.permute(0, 2, 1)            # [B, L, C]
+        h = self.linear(x_reshaped)               # [B, L, C*2]
+        h = h.permute(0, 2, 1)                    # [B, C*2, L]
+
+        # Upsample length by factor 2 (nearest neighbor)
+        # Use the same logic as downsampling to maintain symmetry
+        h = F.interpolate(h, scale_factor=2, mode='nearest')  # [B, C*2, L*2]
+        return h
+
+
+class Downsample(nn.Module):
+    """
+    ### Scale down the feature map by 1/2 using AvgPool1d with ceil_mode=True
+    """
+    def __init__(self, n_channels):
+        super().__init__()
+        # map each position's channel vector (kept same channels)
+        self.linear = nn.Linear(n_channels, n_channels)
+        # use module variant for clarity if you prefer, but functional call below is fine
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        # x: [batch, n_channels, length]
+        _ = t
+
+        # Apply linear per-position
+        x_reshaped = x.permute(0, 2, 1)   # [B, L, C]
+        h = self.linear(x_reshaped)      # [B, L, C]
+        h = h.permute(0, 2, 1)           # [B, C, L]
+
+        # Downsample length by factor 2. ceil_mode=True handles odd lengths by rounding up.
+        # Use kernel_size=2, stride=2 to halve the sequence length (ceil for odd).
+        h = F.avg_pool1d(h, kernel_size=2, stride=2, ceil_mode=True)  # [B, C, ceil(L/2)]
+        return h
+'''
+
+class Upsample(nn.Module):
+    """
+    ### Scale up the feature map by 2× using ConvTranspose1d
+    Equivalent to 2D (4x4, stride=2, padding=1) but in 1D.
+    """
+    def __init__(self, n_channels):
+        super().__init__()
+        # doubles the sequence length
+        self.conv = nn.ConvTranspose1d(
+            n_channels, n_channels,
+            kernel_size=4, stride=2, padding=1
+        )
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        _ = t  # for interface consistency
+        # x: [B, C, L]
+        return self.conv(x)
+
+
+class Downsample(nn.Module):
+    """
+    ### Scale down the feature map by 1/2× using stride-2 Conv1d
+    Equivalent to 2D (3x3, stride=2, padding=1) but in 1D.
+    """
+    def __init__(self, n_channels):
+        super().__init__()
+        # halves the sequence length
+        self.conv = nn.Conv1d(
+            n_channels, n_channels,
+            kernel_size=3, stride=2, padding=1
+        )
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        _ = t
+        # x: [B, C, L]
+        return self.conv(x)
+
+'''
+class Downsample(nn.Module):
+    """
+    Do NOT change the sequence length. Only map channels: C_in -> C_out.
+    Implements the interface of (x, t) -> x' with x: [B, C_in, L].
+    """
+    def __init__(self, c_in: int, c_out: int):
+        super().__init__()
+        # 1x1 conv acts like a position-wise linear mapping across channels
+        self.conv1x1 = nn.Conv1d(c_in, c_out, kernel_size=1, stride=1, padding=0)
+        # optional normalization + activation (keeps style similar to residual blocks)
+        self.norm = nn.GroupNorm(1, c_out)  # GroupNorm(1) ~ InstanceNorm across channels but stable
+        self.act = nn.SiLU()
+
+    def forward(self, x: torch.Tensor, t: Optional[torch.Tensor]=None):
+        _ = t
+        # x: [B, C_in, L] -> keep L same
+        h = self.conv1x1(x)      # -> [B, C_out, L]
+        h = self.norm(h)
+        h = self.act(h)
+        return h
+
+
+class Upsample(nn.Module):
+    """
+    Do NOT change the sequence length. Only map channels: C_in -> C_out.
+    Keeps same signature (x, t).
+    """
+    def __init__(self, c_in: int, c_out: int):
+        super().__init__()
+        self.conv1x1 = nn.Conv1d(c_in, c_out, kernel_size=1, stride=1, padding=0)
+        self.norm = nn.GroupNorm(1, c_out)
+        self.act = nn.SiLU()
+
+    def forward(self, x: torch.Tensor, t: Optional[torch.Tensor]=None):
+        _ = t
+        h = self.conv1x1(x)      # [B, C_out, L]
+        h = self.norm(h)
+        h = self.act(h)
+        return h
+'''
 
 class UNet1D(Module):
     """
@@ -409,7 +536,8 @@ class UNet1D(Module):
         # Final normalization and linear layer
         self.norm = nn.LayerNorm(in_channels)
         self.act = Swish()
-        self.final = nn.Linear(in_channels, input_channels)
+        # Output 32 channels for padded data, will be trimmed to 29 in forward pass
+        self.final = nn.Linear(in_channels, 32)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor):
         """
@@ -450,8 +578,17 @@ class UNet1D(Module):
             else:
                 # Get the skip connection from first half of U-Net and concatenate
                 s = h.pop()
+                print('At UpBlock, S shape:',s.shape)
+                print('At UpBlock, X shape:',x.shape)
+                
+                # Handle length mismatch by interpolating the skip connection to match x
+                if s.shape[2] != x.shape[2]:
+                    print(f'Length mismatch: s={s.shape[2]}, x={x.shape[2]}, interpolating s')
+                    s = F.interpolate(s, size=x.shape[2], mode='nearest')
+                    print('After interpolation, S shape:',s.shape)
+                
                 x = torch.cat((x, s), dim=1)
-                #
+                print('After concatenation, X shape:',x.shape)
                 x = m(x, t)
 
         # Reshape for final linear layer: [batch_size, length, in_channels]
@@ -459,6 +596,10 @@ class UNet1D(Module):
         
         # Final normalization and linear transformation
         x_final = self.final(self.act(self.norm(x_final)))  # [batch_size, length, input_channels]
+        
+        # Remove padding: if output is 32 dimensions, keep only first 29
+        if x_final.shape[-1] == 32:
+            x_final = x_final[..., :29]  # Keep only first 29 dimensions
         
         # Reshape back to [batch_size, input_channels, length]
         return x_final.permute(0, 2, 1)
