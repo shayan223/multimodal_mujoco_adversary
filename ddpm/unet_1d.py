@@ -67,7 +67,7 @@ class TimeEmbedding(nn.Module):
         # \end{align}
         #
         # where $d$ is `half_dim`
-        print('T input shape:',t.shape)
+        #print('T input shape:',t.shape)
 
         half_dim = self.n_channels // 8
         emb = math.log(10_000) / (half_dim - 1)
@@ -80,7 +80,7 @@ class TimeEmbedding(nn.Module):
         emb = self.lin2(emb)
 
         
-        print('Time embedding shape:',emb.shape)
+        #print('Time embedding shape:',emb.shape)
         return emb
 
 
@@ -544,12 +544,12 @@ class UNet1D(Module):
         * `x` has shape `[batch_size, input_channels, length]`
         * `t` has shape `[batch_size]`
         """
-        print('At forward, X input shape:',x.shape)
-        print('At forward, T input shape:',t.shape)
+        #print('At forward, X input shape:',x.shape)
+        #print('At forward, T input shape:',t.shape)
         # Get time-step embeddings
         t = self.time_emb(t)
-        print('After time embedding, T shape:',t.shape)
-        print('Shape before projection:',x.shape)
+        #print('After time embedding, T shape:',t.shape)
+        #print('Shape before projection:',x.shape)
 
         # Reshape for linear projection: [batch_size, length, input_channels]
         batch_size, input_channels, length = x.shape
@@ -578,17 +578,17 @@ class UNet1D(Module):
             else:
                 # Get the skip connection from first half of U-Net and concatenate
                 s = h.pop()
-                print('At UpBlock, S shape:',s.shape)
-                print('At UpBlock, X shape:',x.shape)
+                #print('At UpBlock, S shape:',s.shape)
+                #print('At UpBlock, X shape:',x.shape)
                 
                 # Handle length mismatch by interpolating the skip connection to match x
                 if s.shape[2] != x.shape[2]:
-                    print(f'Length mismatch: s={s.shape[2]}, x={x.shape[2]}, interpolating s')
+                    #print(f'Length mismatch: s={s.shape[2]}, x={x.shape[2]}, interpolating s')
                     s = F.interpolate(s, size=x.shape[2], mode='nearest')
-                    print('After interpolation, S shape:',s.shape)
+                    #print('After interpolation, S shape:',s.shape)
                 
                 x = torch.cat((x, s), dim=1)
-                print('After concatenation, X shape:',x.shape)
+                #print('After concatenation, X shape:',x.shape)
                 x = m(x, t)
 
         # Reshape for final linear layer: [batch_size, length, in_channels]

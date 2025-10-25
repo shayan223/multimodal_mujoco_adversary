@@ -203,8 +203,8 @@ class DenoiseDiffusion:
         q(x_t|x_0) &= \mathcal{N} \Big(x_t; \sqrt{\bar\alpha_t} x_0, (1-\bar\alpha_t) \mathbf{I} \Big)
         \end{align}
         """
-        print('At q_xt_x0, X0 shape:',x0.shape)
-        print('At q_xt_x0, T shape:',t.shape)
+        #print('At q_xt_x0, X0 shape:',x0.shape)
+        #print('At q_xt_x0, T shape:',t.shape)
         # [gather](utils.html) $\alpha_t$ and compute $\sqrt{\bar\alpha_t} x_0$
         '''
         mean = gather(self.alpha_bar, t) ** 0.5 * x0
@@ -214,8 +214,8 @@ class DenoiseDiffusion:
         alpha_t = self.alpha_bar[t].view(-1, 1, 1)   # [B,1,1]
         mean = (alpha_t ** 0.5) * x0                 # [B, C, L]
         var = 1 - alpha_t                             # [B,1,1], broadcasts to [B,C,L]
-        print('At q_xt_x0, Mean shape:',mean.shape)
-        print('At q_xt_x0, Var shape:',var.shape)
+        #print('At q_xt_x0, Mean shape:',mean.shape)
+        #print('At q_xt_x0, Var shape:',var.shape)
         #
         return mean, var
 
@@ -233,12 +233,12 @@ class DenoiseDiffusion:
             eps = torch.randn_like(x0)
 
         # get $q(x_t|x_0)$
-        print('At q_sample, X0 shape:',x0.shape)
-        print('At q_sample, T shape:',t.shape)
+        #print('At q_sample, X0 shape:',x0.shape)
+        #print('At q_sample, T shape:',t.shape)
         mean, var = self.q_xt_x0(x0, t)
-        print('At q_sample, Mean shape:',mean.shape)
-        print('At q_sample, Var shape:',var.shape)
-        print('At q_sample, Eps shape:',eps.shape)
+        #print('At q_sample, Mean shape:',mean.shape)
+        #print('At q_sample, Var shape:',var.shape)
+        #print('At q_sample, Eps shape:',eps.shape)
         # Sample from $q(x_t|x_0)$
         return mean + (var ** 0.5) * eps
 
@@ -307,14 +307,14 @@ class DenoiseDiffusion:
         t0 = torch.full(size=(batch_size,), fill_value=0, device=x0.device, dtype=torch.long)
         #alpha = t / self.n_steps
         alpha = t.float() / float(self.n_steps)
-        print('At origin_q_sample, X0 shape:',x0.shape)
-        print('At origin_q_sample, T shape:',T.shape)
+        #print('At origin_q_sample, X0 shape:',x0.shape)
+        #print('At origin_q_sample, T shape:',T.shape)
         xT = self.q_sample(x0,T)
-        print('At origin_q_sample, XTSHAPE:',xT.shape)
+        #print('At origin_q_sample, XTSHAPE:',xT.shape)
         x0 = self.q_sample(x0,t0)
-        print('At origin_q_sample, Alpha shape:',alpha.shape)
-        print('At origin_q_sample, X0 shape:',x0.shape)
-        print('At origin_q_sample, XTSHAPE:',xT.shape)
+        #print('At origin_q_sample, Alpha shape:',alpha.shape)
+        #print('At origin_q_sample, X0 shape:',x0.shape)
+        #print('At origin_q_sample, XTSHAPE:',xT.shape)
         if(base_t is not None):
             #we rescale xT to an arbitrary point between xT and x0
             alpha_T = base_t / self.n_steps
@@ -369,13 +369,13 @@ class DenoiseDiffusion:
         batch_size = x0.shape[0]
         # Get random $t$ for each sample in the batch
         t = torch.randint(0, self.n_steps, (batch_size,), device=x0.device, dtype=torch.long)
-        print('At adv_denoiseing_loss, T shape:',t.shape)
-        print('At adv_denoiseing_loss, X0 shape:',x0.shape)
+        #print('At adv_denoiseing_loss, T shape:',t.shape)
+        #print('At adv_denoiseing_loss, X0 shape:',x0.shape)
         # Sample $x_t$ for $q(x_t|x_0)$
         xt = self.origin_q_sample(x0, t, base_t)
-        print('At adv_denoiseing_loss, T shape:',t.shape)
-        print('At adv_denoiseing_loss, XT shape:',xt.shape)
-        print('At adv_denoiseing_loss, X0 shape:',x0.shape)
+        #print('At adv_denoiseing_loss, T shape:',t.shape)
+        #print('At adv_denoiseing_loss, XT shape:',xt.shape)
+        #print('At adv_denoiseing_loss, X0 shape:',x0.shape)
         # Get $\textcolor{lightgreen}{\epsilon_\theta}(\sqrt{\bar\alpha_t} x_0 + \sqrt{1-\bar\alpha_t}\epsilon, t)$
         #eps_theta = self.eps_model(xt, t)
         x0_reconst = self.eps_model(xt,t)

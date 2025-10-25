@@ -81,8 +81,8 @@ class sensor_diffusion_dataset(Dataset):
         # This creates a "1D image" that UNet can process
         sample = sample.unsqueeze(0)#.unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
         target = target.unsqueeze(0)#.unsqueeze(0)#.unsqueeze(0)  # [1, 1, 1, sensor_dim]
-        print(sample.shape)
-        print(target.shape)
+        #print(sample.shape)
+        #print(target.shape)
 
         return sample, target
 
@@ -228,8 +228,8 @@ class Diffusion_model():
             # Make the gradients zero
             self.optimizer.zero_grad()
             # Calculate loss - using adversarial data as input, benign as target
-            print(f"Adversarial data shape: {adversarial_data.shape}")
-            print(f"Benign data shape: {benign_data.shape}")
+            #print(f"Adversarial data shape: {adversarial_data.shape}")
+            #print(f"Benign data shape: {benign_data.shape}")
             
             # Call adv_denoiseing_loss with benign data as target
             x0_reconst, loss = self.diffusion.adv_denoiseing_loss(adversarial_data, benign_x=benign_data)
@@ -259,8 +259,8 @@ class Diffusion_model():
         if len(dataset) > 0:
             sample_data, _ = dataset[0]
             self.sensor_dim = sample_data.shape[0]
-            print(f"Padded sensor data dimension: {self.sensor_dim}")
-            print(f"Original sensor data dimension: {self.original_sensor_dim}")
+            #print(f"Padded sensor data dimension: {self.sensor_dim}")
+            #print(f"Original sensor data dimension: {self.original_sensor_dim}")
             
             # Create model now that we know the sensor dimension
             # Use padded dimension (32) for model input/output
