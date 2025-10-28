@@ -33,7 +33,7 @@ def main(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Training and Testing for DDPM diffusion model')
-    parser.add_argument('--pretrain_ddpm', action='store_true', default=False,
+    parser.add_argument('--pretrain_ddpm', action='store_true', default=True,
                         help='Performs DDPM pretraining')
     parser.add_argument('--experiment_name', type=str, default='diffusion_defense_1',
                         help='Name of experiment to load/save to.')

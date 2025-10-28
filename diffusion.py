@@ -17,6 +17,7 @@ from torch.utils.data import Dataset
 from ddpm.unet import UNet
 from ddpm.unet_1d import UNet1D
 from ddpm.unet_1d_V2 import UNet1D_V2
+from ddpm.unet_mlp_1d import UNetMLP1D
 from ddpm.diffusion import DenoiseDiffusion
 
 
@@ -72,10 +73,10 @@ class sensor_diffusion_dataset(Dataset):
         target = torch.tensor(target, dtype=self.dtype)
         
         # Pad from 29 to 32 dimensions by adding zeros at the end
-        if sample.shape[0] == 29:
-            sample = torch.cat([sample, torch.zeros(3, dtype=self.dtype)], dim=0)
-        if target.shape[0] == 29:
-            target = torch.cat([target, torch.zeros(3, dtype=self.dtype)], dim=0)
+        #if sample.shape[0] == 29:
+        #    sample = torch.cat([sample, torch.zeros(3, dtype=self.dtype)], dim=0)
+        #if target.shape[0] == 29:
+        #    target = torch.cat([target, torch.zeros(3, dtype=self.dtype)], dim=0)
         
         # Reshape 1D sensor data to 2D for UNet: [sensor_dim] -> [1, 1, 1, sensor_dim]
         # This creates a "1D image" that UNet can process
@@ -264,12 +265,14 @@ class Diffusion_model():
             
             # Create model now that we know the sensor dimension
             # Use padded dimension (32) for model input/output
+            '''
             self.eps_model = UNet1D(
                 input_channels=self.image_channels,
                 n_channels=self.n_channels,
                 ch_mults=self.channel_multipliers,
                 is_attn=self.is_attention,
                 ).to(self.device)
+            '''
             '''
             self.eps_model = UNet1D_V2(
                 input_channels=self.image_channels,
@@ -278,6 +281,14 @@ class Diffusion_model():
                 is_attn=self.is_attention,
                 ).to(self.device)
             ''' 
+            self.eps_model = UNetMLP1D(
+            input_channels=1,      # Input vector dimension
+            n_channels=32,          # Base number of channels
+            ch_mults=(1, 2, 2, 4),  # Channel multipliers for each resolution
+            is_attn=(False, False, True, True),  # Attention at higher resolutions
+            n_blocks=2              # Number of blocks per resolution
+            ).to(self.device)
+
             # Create [DDPM class](index.html)
             self.diffusion = DenoiseDiffusion(
                 eps_model=self.eps_model,

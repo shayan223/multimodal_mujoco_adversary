@@ -39,7 +39,7 @@ class Swish(Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-
+'''
 class TimeEmbedding(nn.Module):
     """
     ### Embeddings for $t$
@@ -79,7 +79,47 @@ class TimeEmbedding(nn.Module):
         emb = self.lin2(emb)
 
         return emb
+'''
+class TimeEmbedding(nn.Module):
+    """ ### Embeddings for t """
 
+    def __init__(self, n_channels: int):
+        """
+        * n_channels is the number of dimensions in the embedding (the final time-embedding size)
+        """
+        super().__init__()
+        self.n_channels = n_channels
+
+        # Compute half_dim the same way as in forward so sizes match exactly.
+        # half_dim is the number of frequencies for sin/cos, so the raw
+        # sinusoidal vector length will be 2 * half_dim.
+        self.half_dim = max(1, self.n_channels // 8)
+
+        # Input dimension to lin1 is the sinusoidal vector length: 2 * half_dim
+        sin_cos_dim = 2 * self.half_dim
+
+        # First linear layer: maps sin/cos embedding -> desired time embedding dim
+        self.lin1 = nn.Linear(sin_cos_dim, self.n_channels)
+
+        # Activation
+        self.act = Swish()
+
+        # Second linear layer keeps the same dimension
+        self.lin2 = nn.Linear(self.n_channels, self.n_channels)
+
+    def forward(self, t: torch.Tensor):
+        # Build sinusoidal embeddings (same formula you already have)
+        emb_scale = math.log(10_000) / (self.half_dim - 1) if self.half_dim > 1 else 0.0
+        emb = torch.exp(torch.arange(self.half_dim, device=t.device) * -emb_scale)
+        emb = t[:, None] * emb[None, :]
+
+        # Concatenate sin and cos -> shape [batch_size, 2 * half_dim]
+        emb = torch.cat((emb.sin(), emb.cos()), dim=1)
+
+        # Transform with the MLP
+        emb = self.act(self.lin1(emb))
+        emb = self.lin2(emb)
+        return emb
 
 class ResidualBlock(Module):
     """
@@ -278,7 +318,7 @@ class MiddleBlock(Module):
 
 class Upsample(nn.Module):
     """
-    ### Scale up the feature map by 2× using linear interpolation
+    ### Scale up the feature map by 2× using adaptive linear interpolation
     """
 
     def __init__(self, n_channels):
@@ -299,18 +339,19 @@ class Upsample(nn.Module):
         # Apply linear transformation
         h = self.linear(x_reshaped)  # [batch_size, length, n_channels]
         
-        # Reshape back and upsample using interpolation
+        # Reshape back and upsample using adaptive interpolation
         h = h.permute(0, 2, 1)  # [batch_size, n_channels, length]
         
-        # Upsample by factor of 2 using linear interpolation
-        h = F.interpolate(h, scale_factor=2, mode='linear', align_corners=False)
+        # Upsample by factor of 2 using adaptive linear interpolation
+        target_length = length * 2
+        h = F.interpolate(h, size=target_length, mode='linear', align_corners=False)
         
         return h
 
 
 class Downsample(nn.Module):
     """
-    ### Scale down the feature map by 1/2× using average pooling
+    ### Scale down the feature map by 1/2× using adaptive average pooling
     """
 
     def __init__(self, n_channels):
@@ -331,11 +372,12 @@ class Downsample(nn.Module):
         # Apply linear transformation
         h = self.linear(x_reshaped)  # [batch_size, length, n_channels]
         
-        # Reshape back and downsample using average pooling
+        # Reshape back and downsample using adaptive average pooling
         h = h.permute(0, 2, 1)  # [batch_size, n_channels, length]
         
-        # Downsample by factor of 2 using average pooling
-        h = F.avg_pool1d(h, kernel_size=2, stride=2, ceil_mode=True)
+        # Downsample by factor of 2 using adaptive average pooling to preserve exact ratios
+        target_length = max(1, length // 2)
+        h = F.adaptive_avg_pool1d(h, target_length)
         
         return h
 
@@ -345,7 +387,7 @@ class UNetMLP1D(Module):
     ## MLP-based 1D U-Net
     """
 
-    def __init__(self, input_channels: int = 1, n_channels: int = 64,
+    def __init__(self, input_channels: int = 1, n_channels: int = 32,
                  ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 2, 4),
                  is_attn: Union[Tuple[bool, ...], List[int]] = (False, False, True, True),
                  n_blocks: int = 2):
@@ -414,7 +456,7 @@ class UNetMLP1D(Module):
         self.norm = nn.LayerNorm(in_channels)
         self.act = Swish()
         self.final = nn.Linear(in_channels, input_channels)
-
+    '''
     def forward(self, x: torch.Tensor, t: torch.Tensor):
         """
         * `x` has shape `[batch_size, input_channels, length]`
@@ -466,3 +508,95 @@ class UNetMLP1D(Module):
         
         # Reshape back to [batch_size, input_channels, length]
         return x_final.permute(0, 2, 1)
+        '''
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        """ 
+        * x has shape [batch_size, input_channels, length]
+        * t has shape [batch_size]
+        This version pads the input to the next power of two (centered padding),
+        runs the U-Net, then unpads to the original length.
+        """
+        # helper: next power of two
+        def next_power_of_two(n: int) -> int:
+            if n <= 1:
+                return 1
+            return 1 << (n - 1).bit_length()
+
+        # original length
+        batch_size, input_channels, length = x.shape
+
+        # compute target length (next power of two)
+        target_length = next_power_of_two(length)
+
+        # if already power of two, no padding; else pad symmetrically
+        pad_left = pad_right = 0
+        padded = False
+        if target_length != length:
+            pad_total = target_length - length
+            pad_left = pad_total // 2
+            pad_right = pad_total - pad_left
+            # F.pad's pad format for 1D is (pad_left, pad_right)
+            x = F.pad(x, (pad_left, pad_right))
+            padded = True
+
+        # Get time-step embeddings
+        t = self.time_emb(t)
+
+        # Reshape for linear projection: [batch_size, length, input_channels]
+        # Note: recompute length after possible padding
+        _, _, length_p = x.shape
+        x_reshaped = x.permute(0, 2, 1)  # [batch_size, length_p, input_channels]
+
+        # Get input projection
+        x_proj = self.input_proj(x_reshaped)  # [batch_size, length_p, n_channels]
+
+        # Reshape back to [batch_size, n_channels, length_p]
+        x = x_proj.permute(0, 2, 1)
+
+        # h will store outputs at each resolution for skip connection
+        h = [x]
+
+        # First half of U-Net
+        for m in self.down:
+            x = m(x, t)
+            h.append(x)
+
+        # Middle (bottom)
+        x = self.middle(x, t)
+
+        # Second half of U-Net
+        for m in self.up:
+            if isinstance(m, Upsample):
+                x = m(x, t)
+            else:
+                # Get the skip connection from first half of U-Net and concatenate
+                s = h.pop()
+                # Handle length mismatch by interpolating the skip connection to match x
+                if s.shape[2] != x.shape[2]:
+                    s = F.interpolate(s, size=x.shape[2], mode='linear', align_corners=False)
+                x = torch.cat((x, s), dim=1)
+                x = m(x, t)
+
+        # Reshape for final linear layer: [batch_size, length_p, in_channels]
+        x_final = x.permute(0, 2, 1)  # [batch_size, length_p, in_channels]
+
+        # Final normalization and linear transformation
+        x_final = self.final(self.act(self.norm(x_final)))  # [batch_size, length_p, input_channels]
+
+        # Reshape back to [batch_size, input_channels, length_p]
+        out = x_final.permute(0, 2, 1)
+
+        # If we padded at the start, unpad symmetrically to original length
+        if padded:
+            # slice along last (length) dimension
+            start = pad_left
+            end = start + length
+            out = out[:, :, start:end]
+
+        # final sanity: ensure original shape
+        if out.shape != (batch_size, input_channels, length):
+            # fallback: interpolate to original length (should be unnecessary, but safe)
+            out = F.interpolate(out, size=length, mode='linear', align_corners=False)
+
+        return out
