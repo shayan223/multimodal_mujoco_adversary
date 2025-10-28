@@ -373,9 +373,9 @@ class DenoiseDiffusion:
         #print('At adv_denoiseing_loss, X0 shape:',x0.shape)
         # Sample $x_t$ for $q(x_t|x_0)$
         xt = self.origin_q_sample(x0, t, base_t)
-        print('At adv_denoiseing_loss, T shape:',t.shape)
-        print('At adv_denoiseing_loss, XT shape:',xt.shape)
-        print('At adv_denoiseing_loss, X0 shape:',x0.shape)
+        #print('At adv_denoiseing_loss, T shape:',t.shape)
+        #print('At adv_denoiseing_loss, XT shape:',xt.shape)
+        #print('At adv_denoiseing_loss, X0 shape:',x0.shape)
         # Get $\textcolor{lightgreen}{\epsilon_\theta}(\sqrt{\bar\alpha_t} x_0 + \sqrt{1-\bar\alpha_t}\epsilon, t)$
         #eps_theta = self.eps_model(xt, t)
         x0_reconst = self.eps_model(xt,t)
