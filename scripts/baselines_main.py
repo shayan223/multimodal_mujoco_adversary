@@ -30,6 +30,8 @@ from defense_vae import VAE_3d, VAE_simple
 
 from ADVERSARIAL_CONFIGS import adversarial_cfg
 
+from ..diffusion import Diffusion_model
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @hydra.main(config_path=ddiffpg.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
@@ -69,6 +71,11 @@ def main(cfg: DictConfig):
         if(defence_method == 'VAE'):
             def_model = VAE_simple()
             def_model.load_state_dict(torch.load(save_path+'defence_vae.pth', weights_only=True))
+            def_model.eval()
+            def_model = def_model.to(device)
+        if(defence_method == 'DDPM'):
+            def_model = Diffusion_model(experiment_name='diffusion_defense_1')
+            def_model.load_params()
             def_model.eval()
             def_model = def_model.to(device)
         else:
@@ -343,6 +350,14 @@ def defender(defence=None, defence_model=None):
 
             return obs
         return vae_defend
+    
+    if(defence == 'DDPM'):
+        def ddpm_defend(obs):
+            obs = torch.Tensor(obs).to(device)
+            obs = defence_model.inference(obs)
+            return obs
+        return ddpm_defend
+
 
 
 
