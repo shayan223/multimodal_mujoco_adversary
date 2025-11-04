@@ -42,13 +42,28 @@ class sensor_diffusion_dataset(Dataset):
         print("Number of Benign Samples: ", len(data_benign))
         print("Number of Adversarial Samples: ", len(data_adversarial))
         
-        # Use adversarial data as input and benign data as target
-        # We need to match the number of samples
-        min_samples = min(len(data_benign), len(data_adversarial))
-        self.data = data_adversarial[:min_samples].astype(np.float32)  # Input (adversarial)
-        self.targets = data_benign[:min_samples].astype(np.float32)   # Target (benign)
+        # Match the number of samples - use n = number of benign samples
+        n = len(data_benign)
+        # Use n adversarial samples (matched with benign samples)
+        n_adversarial = min(n, len(data_adversarial))
+        
+        # Create dataset with 2n samples:
+        # First n samples: benign data as input, benign data as target (self-labeled)
+        # Next n samples: adversarial data as input, benign data as target (matched with benign counterpart)
+        benign_inputs = data_benign[:n].astype(np.float32)
+        benign_targets = data_benign[:n].astype(np.float32)  # Benign samples labeled with themselves
+        
+        adversarial_inputs = data_adversarial[:n_adversarial].astype(np.float32)
+        adversarial_targets = data_benign[:n_adversarial].astype(np.float32)  # Adversarial samples labeled with benign counterpart
+        
+        # If we have fewer adversarial samples than benign, we'll only use what we have
+        # This ensures we have at least n samples (all benign), and up to 2n if we have enough adversarial
+        self.data = np.vstack([benign_inputs, adversarial_inputs]).astype(np.float32)
+        self.targets = np.vstack([benign_targets, adversarial_targets]).astype(np.float32)
         
         print("Total Number of Samples in Dataset: ", len(self.data))
+        print("  - Benign samples (self-labeled): ", len(benign_inputs))
+        print("  - Adversarial samples (labeled with benign counterpart): ", len(adversarial_inputs))
 
         # Shuffle
         indices = np.random.permutation(len(self.data))
