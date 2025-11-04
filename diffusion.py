@@ -169,11 +169,35 @@ class Diffusion_model():
         self.training_data_loader = None
         self.adv_training_data_loader = None
 
+        # Load dataset to determine input shape
+        dataset = sensor_diffusion_dataset(self.benign_csv, self.adversarial_csv, transform=self.data_transforms)
+        if len(dataset) > 0:
+            sample_data, _ = dataset[0]
+            self.input_shape = sample_data.shape  # Shape after processing (e.g., [1, sensor_dim])
+            self.sensor_dim = sample_data.shape[-1]  # Last dimension is the sensor dimension
+            print(f"Input shape determined: {self.input_shape}")
+            print(f"Sensor dimension: {self.sensor_dim}")
+        else:
+            raise ValueError("Dataset is empty, cannot determine input shape")
+        
+        # Initialize model
+        self.eps_model = UNetMLP1D(
+            input_channels=1,      # Input vector dimension
+            n_channels=32,          # Base number of channels
+            ch_mults=(1, 2, 2, 4),  # Channel multipliers for each resolution
+            is_attn=(False, False, True, True),  # Attention at higher resolutions
+            n_blocks=2              # Number of blocks per resolution
+        ).to(self.device)
 
-        # Model will be created in run() method after we know sensor dimensions
-        self.eps_model = None
-        self.diffusion = None
-        self.optimizer = None
+        # Create [DDPM class](index.html)
+        self.diffusion = DenoiseDiffusion(
+            eps_model=self.eps_model,
+            n_steps=self.n_steps,
+            device=self.device,
+        )
+
+        # Adam optimizer
+        self.optimizer = torch.optim.Adam(self.eps_model.parameters(), lr=self.learning_rate)
 
 
 
@@ -270,49 +294,6 @@ class Diffusion_model():
         
         # Dataset - use sensor data
         dataset = sensor_diffusion_dataset(self.benign_csv, self.adversarial_csv, transform=self.data_transforms)
-        
-        # Set sensor dimension from loaded data and create model
-        if len(dataset) > 0:
-            sample_data, _ = dataset[0]
-            self.sensor_dim = sample_data.shape[0]
-            #print(f"Padded sensor data dimension: {self.sensor_dim}")
-            #print(f"Original sensor data dimension: {self.original_sensor_dim}")
-            
-            # Create model now that we know the sensor dimension
-            # Use padded dimension (32) for model input/output
-            '''
-            self.eps_model = UNet1D(
-                input_channels=self.image_channels,
-                n_channels=self.n_channels,
-                ch_mults=self.channel_multipliers,
-                is_attn=self.is_attention,
-                ).to(self.device)
-            '''
-            '''
-            self.eps_model = UNet1D_V2(
-                input_channels=self.image_channels,
-                n_channels=self.n_channels,
-                ch_mults=self.channel_multipliers,
-                is_attn=self.is_attention,
-                ).to(self.device)
-            ''' 
-            self.eps_model = UNetMLP1D(
-            input_channels=1,      # Input vector dimension
-            n_channels=32,          # Base number of channels
-            ch_mults=(1, 2, 2, 4),  # Channel multipliers for each resolution
-            is_attn=(False, False, True, True),  # Attention at higher resolutions
-            n_blocks=2              # Number of blocks per resolution
-            ).to(self.device)
-
-            # Create [DDPM class](index.html)
-            self.diffusion = DenoiseDiffusion(
-                eps_model=self.eps_model,
-                n_steps=self.n_steps,
-                device=self.device,
-            )
-
-            # Adam optimizer
-            self.optimizer = torch.optim.Adam(self.eps_model.parameters(), lr=self.learning_rate)
         
         # select smaller subset for training
         subset_factor = 8 #ie. use one nth of the total dataset
