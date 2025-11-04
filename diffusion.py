@@ -415,6 +415,89 @@ class Diffusion_model():
                 np.save(self.experiment_path+'target_benign_'+self.experiment_name+'_epoch'+str(epoch_num)+'.npy', benign_1d.cpu().numpy())
                 np.save(self.experiment_path+'noisy_'+self.experiment_name+'_epoch'+str(epoch_num)+'.npy', xT_1d.cpu().numpy())
 
+    def inference(self, input_vector, starting_t=None, return_numpy=False):
+        """
+        Inference function that takes a vector input, runs the diffusion loop, and returns the denoised output.
+        
+        Args:
+            input_vector: Input vector (can be numpy array or torch tensor). 
+                         Can be 1D [sensor_dim] or 2D [batch_size, sensor_dim] or match input_shape.
+            starting_t: Starting timestep for diffusion (default: n_steps - 1)
+            return_numpy: If True, return numpy array; if False, return torch tensor (default: False)
+        
+        Returns:
+            Denoised output vector with same shape as input (or numpy array if return_numpy=True)
+        """
+        if starting_t is None:
+            starting_t = self.n_steps - 1
+        
+        # Convert to tensor if needed
+        if isinstance(input_vector, np.ndarray):
+            input_vector = torch.tensor(input_vector, dtype=torch.float32)
+        
+        # Ensure input is on the correct device
+        input_vector = input_vector.to(self.device)
+        
+        # Handle different input shapes
+        original_shape = input_vector.shape
+        if len(original_shape) == 1:
+            # Single vector: [sensor_dim] -> [1, 1, sensor_dim] to match input_shape
+            input_vector = input_vector.unsqueeze(0)  # [1, sensor_dim]
+            batch_size = 1
+            single_sample = True
+        elif len(original_shape) == 2:
+            # Batch of vectors: [batch_size, sensor_dim]
+            batch_size = original_shape[0]
+            single_sample = False
+        else:
+            # Already in the right shape (e.g., [batch, 1, sensor_dim])
+            batch_size = original_shape[0]
+            single_sample = False
+            # Flatten to [batch, sensor_dim] if needed
+            if len(original_shape) > 2:
+                input_vector = input_vector.view(batch_size, -1)
+        
+        # Ensure the input matches the expected shape
+        # The model expects [batch, 1, sensor_dim] based on input_shape
+        if len(input_vector.shape) == 2:
+            input_vector = input_vector.unsqueeze(1)  # [batch, 1, sensor_dim]
+        
+        with torch.no_grad():
+            # Use adversarial data as input for diffusion process
+            t = torch.full(size=(batch_size,), fill_value=self.n_steps - 1, 
+                          device=input_vector.device, dtype=torch.long)
+            xT = self.diffusion.origin_q_sample(input_vector, t, base_t=starting_t)
+            xt = xT
+            xt_next = None
+            
+            # Remove noise for $T$ steps
+            for t_ in range(self.n_steps):
+                S_theta = self.eps_model(xt, t)
+                # Simplified denoising step
+                xt_next = xt - (1/self.n_steps)*(xT - S_theta)
+                
+                # Advance to the next time step
+                t_val = self.n_steps - (t_ % self.n_steps) - 1
+                t = torch.full(size=(batch_size,), fill_value=t_val, 
+                              device=input_vector.device, dtype=torch.long)
+                xt = xt_next
+            
+            # Extract output (remove extra dimensions if needed)
+            output = xt
+            if len(output.shape) > 2:
+                # Reshape from [batch, 1, sensor_dim] to [batch, sensor_dim]
+                output = output.squeeze(1)
+            
+            # If single sample, remove batch dimension
+            if single_sample:
+                output = output.squeeze(0)
+            
+            # Convert to numpy if requested
+            if return_numpy:
+                output = output.cpu().numpy()
+            
+            return output
+
     def adv_training(self,adv_loss=None,adv_target=None,victim=None,whitebox=False,base_t=None,targeted_latent=False,target_features=None):
         """
         ### Standard Denoising Training (formerly adversarial training)
