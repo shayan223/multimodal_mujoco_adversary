@@ -30,7 +30,7 @@ from defense_vae import VAE_3d, VAE_simple
 
 from ADVERSARIAL_CONFIGS import adversarial_cfg
 
-from ..diffusion import Diffusion_model
+from diffusion import Diffusion_model
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -76,8 +76,8 @@ def main(cfg: DictConfig):
         if(defence_method == 'DDPM'):
             def_model = Diffusion_model(experiment_name='diffusion_defense_1')
             def_model.load_params()
-            def_model.eval()
-            def_model = def_model.to(device)
+            #def_model.eval()
+            #def_model = def_model.to(device)
         else:
             def_model=None
         #Here we wrap the env to include our defense method in training

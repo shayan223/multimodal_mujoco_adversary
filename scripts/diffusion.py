@@ -107,8 +107,9 @@ class Diffusion_model():
     def __init__(self,experiment_name,debug=False):
         self.debug = debug
         self.experiment_name = experiment_name
+        self.experiment_root = '/home/shayan/github/multimodal_mujoco_adversary/Experiments/' # Can typically use './Experiments/' otherwise switch to absolute path
         self.device = device
-        self.experiment_path = './Experiments/'+experiment_name+'/'
+        self.experiment_path = self.experiment_root+experiment_name+'/'
         self.checkpoint_path = self.experiment_path+experiment_name+'_diffusion_checkpoint.zip'
         self.training_loss_plot_path = self.experiment_path+experiment_name+'_training_loss.png'
         self.loss_vals_path = self.experiment_path+self.experiment_name+'_latest_losses.csv'
@@ -159,9 +160,9 @@ class Diffusion_model():
                                             #self.normalize])
         self.pre_proc = None
 
-        self.data_folder = './mujoco_ant_obs_dataset/'  # folder with MuJoCo sensor data
-        self.benign_csv = './mujoco_ant_obs_dataset/benign_obs_data.csv'
-        self.adversarial_csv = './mujoco_ant_obs_dataset/adversarial_obs_data.csv'
+        self.data_folder = '/home/shayan/github/multimodal_mujoco_adversary/'#'./mujoco_ant_obs_dataset/'  # folder with MuJoCo sensor data
+        self.benign_csv = '/home/shayan/github/multimodal_mujoco_adversary/benign_obs_data.csv'#./mujoco_ant_obs_dataset/benign_obs_data.csv'
+        self.adversarial_csv = '/home/shayan/github/multimodal_mujoco_adversary/adversarial_obs_data.csv'#'./mujoco_ant_obs_dataset/adversarial_obs_data.csv'
 
         # No transforms needed for sensor data
         self.data_transforms = None

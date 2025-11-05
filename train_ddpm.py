@@ -1,5 +1,5 @@
 
-from diffusion import Diffusion_model
+from scripts.diffusion import Diffusion_model
 import os
 from pathlib import Path
 import argparse
