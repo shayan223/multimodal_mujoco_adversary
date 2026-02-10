@@ -28,7 +28,7 @@ class adversarial_cfg():
         self.LEARNING_RATE = 1e-3
 
         #Epsilon value for scaling FGSM attacks
-        self.FGSM_MAGNITUDE = 0.007
+        self.FGSM_MAGNITUDE = 0.015
 
         #directory to save vae model weights and dataset
         #Please end in '/' directory indicator

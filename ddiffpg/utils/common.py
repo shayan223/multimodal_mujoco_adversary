@@ -156,6 +156,58 @@ class Tracker:
         return np.max(self.moving_average)
 
 
+class RewardCurveTracker:
+    """Tracks reward curve for AuC (area under curve) and drop-below-max count/rate."""
+
+    def __init__(self, min_reward_threshold=None, drop_threshold_pct=0.10):
+        self.min_reward_threshold = min_reward_threshold
+        self.drop_threshold_pct = float(drop_threshold_pct)
+        self._step_history = []
+        self._return_history = []
+        self._first_hit_threshold_step = None  # step at which we first hit min_reward_threshold
+        self._drop_below_max_pct_count = 0
+
+    def update(self, step, ret_mean, ret_max):
+        """
+        Update with an eval (step, mean return) and current max return.
+        Returns dict of metrics for wandb: AuC (full and after threshold), Failure Rate, drop count.
+        """
+        self._step_history.append(float(step))
+        self._return_history.append(float(ret_mean))
+
+        if self.min_reward_threshold is not None and self._first_hit_threshold_step is None and ret_mean >= self.min_reward_threshold:
+            self._first_hit_threshold_step = step
+
+        if ret_max > 0 and ret_mean < (ret_max * self.drop_threshold_pct):
+            self._drop_below_max_pct_count += 1
+
+        steps = np.array(self._step_history)
+        returns = np.array(self._return_history)
+        num_evals = len(self._step_history)
+        failure_rate = self._drop_below_max_pct_count / num_evals if num_evals > 0 else 0.0
+
+        auc_full = float(np.trapz(returns, steps)) if len(steps) >= 2 else 0.0
+
+        out = {
+            "eval/AuC_full": auc_full,
+            "eval/Failure Rate": failure_rate,
+            "eval/drop_below_max_pct_count": self._drop_below_max_pct_count,
+        }
+
+        if self.min_reward_threshold is not None:
+            if self._first_hit_threshold_step is not None:
+                # AuC for the curve *after* we first reached the threshold (inclusive)
+                mask = steps >= self._first_hit_threshold_step
+                s = steps[mask]
+                r = returns[mask]
+                auc_after = float(np.trapz(r, s)) if len(s) >= 2 else 0.0
+                out["eval/AuC_after_min_threshold"] = auc_after
+            else:
+                out["eval/AuC_after_min_threshold"] = 0.0
+
+        return out
+
+
 def get_action_dim(action_space):
     if isinstance(action_space, gym.spaces.Discrete):
         act_size = action_space.n
