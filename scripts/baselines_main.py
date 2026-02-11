@@ -265,6 +265,9 @@ def main(cfg: DictConfig):
         if global_steps > cfg.max_step:
             break
 
+    # Log run-level summary metrics for easy comparison across runs
+    wandb.log(reward_curve_tracker.summary_metrics())
+
     #Save the collected dataset of observations
     if(generate_dataset == True):
         print('##############')

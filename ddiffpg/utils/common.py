@@ -166,6 +166,11 @@ class RewardCurveTracker:
         self._return_history = []
         self._first_hit_threshold_step = None  # step at which we first hit min_reward_threshold
         self._drop_below_max_pct_count = 0
+        # For summary statistics
+        self._sum_auc_full = 0.0
+        self._sum_auc_after_threshold = 0.0
+        self._post_threshold_eval_count = 0
+        self._post_threshold_failure_count = 0
 
     def update(self, step, ret_mean, ret_max):
         """
@@ -178,8 +183,10 @@ class RewardCurveTracker:
         if self.min_reward_threshold is not None and self._first_hit_threshold_step is None and ret_mean >= self.min_reward_threshold:
             self._first_hit_threshold_step = step
 
+        is_failure_this_eval = False
         if ret_max > 0 and ret_mean < (ret_max * self.drop_threshold_pct):
             self._drop_below_max_pct_count += 1
+            is_failure_this_eval = True
 
         steps = np.array(self._step_history)
         returns = np.array(self._return_history)
@@ -187,6 +194,7 @@ class RewardCurveTracker:
         failure_rate = self._drop_below_max_pct_count / num_evals if num_evals > 0 else 0.0
 
         auc_full = float(np.trapz(returns, steps)) if len(steps) >= 2 else 0.0
+        self._sum_auc_full += auc_full
 
         out = {
             "eval/AuC_full": auc_full,
@@ -202,10 +210,55 @@ class RewardCurveTracker:
                 r = returns[mask]
                 auc_after = float(np.trapz(r, s)) if len(s) >= 2 else 0.0
                 out["eval/AuC_after_min_threshold"] = auc_after
+                self._sum_auc_after_threshold += auc_after
+
+                # Track post-threshold failure rate (only considering evals after threshold)
+                if step >= self._first_hit_threshold_step:
+                    self._post_threshold_eval_count += 1
+                    if is_failure_this_eval:
+                        self._post_threshold_failure_count += 1
             else:
                 out["eval/AuC_after_min_threshold"] = 0.0
 
         return out
+
+    def summary_metrics(self):
+        """
+        Run-level summary metrics for easy tabular comparison across runs.
+
+        1. summary/max_reward_drops: max number of drops below percentage threshold
+        2. summary/avg_AuC_full: average AuC over all evals
+        3. summary/avg_AuC_after_min_threshold: average AuC after min threshold (if applicable)
+        4. summary/avg_failure_rate: average failure rate over all evals
+        5. summary/avg_failure_rate_after_min_threshold: average failure rate after min threshold (if applicable)
+        """
+        num_evals = len(self._step_history)
+        if num_evals == 0:
+            return {
+                "summary/max_reward_drops": 0,
+                "summary/avg_AuC_full": 0.0,
+                "summary/avg_AuC_after_min_threshold": 0.0,
+                "summary/avg_failure_rate": 0.0,
+                "summary/avg_failure_rate_after_min_threshold": 0.0,
+            }
+
+        avg_auc_full = self._sum_auc_full / num_evals
+        avg_failure_rate = self._drop_below_max_pct_count / num_evals
+
+        if self.min_reward_threshold is not None and self._post_threshold_eval_count > 0:
+            avg_auc_after = self._sum_auc_after_threshold / self._post_threshold_eval_count
+            avg_failure_rate_after = self._post_threshold_failure_count / self._post_threshold_eval_count
+        else:
+            avg_auc_after = 0.0
+            avg_failure_rate_after = 0.0
+
+        return {
+            "summary/max_reward_drops": self._drop_below_max_pct_count,
+            "summary/avg_AuC_full": avg_auc_full,
+            "summary/avg_AuC_after_min_threshold": avg_auc_after,
+            "summary/avg_failure_rate": avg_failure_rate,
+            "summary/avg_failure_rate_after_min_threshold": avg_failure_rate_after,
+        }
 
 
 def get_action_dim(action_space):

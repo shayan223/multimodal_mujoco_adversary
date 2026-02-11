@@ -16,7 +16,7 @@ max_step: 4000000
 
 # Reward-curve metrics for wandb (AoC and drop count)
 reward_tracking:
-  min_reward_threshold: 2  # if set, report AoC for curve *after* reward first hits this value
+  min_reward_threshold: 4  # if set, report AoC for curve *after* reward first hits this value
   drop_threshold_pct: 0.10   # count evals where reward < (ret_max * this)
 max_time: 3600 # in seconds
 

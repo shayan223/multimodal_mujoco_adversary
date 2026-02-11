@@ -169,5 +169,9 @@ def main(cfg: DictConfig):
             break
 
 
+    # Log run-level summary metrics for easy comparison across runs
+    wandb.log(reward_curve_tracker.summary_metrics())
+
+
 if __name__ == '__main__':
     main()

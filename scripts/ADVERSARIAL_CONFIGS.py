@@ -9,7 +9,7 @@ class adversarial_cfg():
         #Turns on dataset collection mode
         self.GENERATE_DATASET = False
         #Prefix for file name to save the dataset you generate
-        self.DATA_PREFIX = 'fgsm007'
+        self.DATA_PREFIX = 'fgsm015'
 
         #Select Defense method, current options are 'VAE', 'VAE_3d', 'Gaussian', 'DDPM', and None
         self.DEF_METHOD = 'DDPM'
