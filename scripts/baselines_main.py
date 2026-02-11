@@ -42,14 +42,16 @@ def main(cfg: DictConfig):
     wandb_run = init_wandb(cfg)
     
     adv_cfg = adversarial_cfg()
-    generate_dataset=adv_cfg.GENERATE_DATASET
-    defence_method=adv_cfg.DEF_METHOD
-    train_on_defense=adv_cfg.TRAIN_ON_DEF
-    target_modality=adv_cfg.TARGET_MODALITY
-    data_prefix=adv_cfg.DATA_PREFIX
-    max_steps_override=adv_cfg.MAX_STEPS_OVERRIDE
-    enable_attack=adv_cfg.ENABLE_ATTACK
-    save_path=adv_cfg.SAVE_PATH
+    generate_dataset = adv_cfg.GENERATE_DATASET
+    defence_method = adv_cfg.DEF_METHOD
+    train_on_defense = adv_cfg.TRAIN_ON_DEF
+    target_modality = adv_cfg.TARGET_MODALITY
+    data_prefix = adv_cfg.DATA_PREFIX
+    max_steps_override = adv_cfg.MAX_STEPS_OVERRIDE
+    enable_attack = adv_cfg.ENABLE_ATTACK
+    save_path = adv_cfg.SAVE_PATH
+    attack_choice = adv_cfg.ATTACK_CHOICE
+    fgsm_eps = adv_cfg.FGSM_MAGNITUDE
 
     if(max_steps_override):
         cfg.max_step = max_steps_override
@@ -163,11 +165,13 @@ def main(cfg: DictConfig):
                 #we don't apply the adversarial perturbation when collecting data, as not to disrupt the agent
                 if(generate_dataset == True):
                     #Seperate standard observation from the perturbed one for data collection
-                    adv_obs = adversary(agent,obs,target_modality=target_modality)
+                    adv_obs = adversary(agent, obs, target_modality=target_modality,
+                                        attack_choice=attack_choice, fgsm_eps=fgsm_eps)
                     
                 elif(enable_attack == True):
                     #We can skip this line if attack is disabled otherwise
-                    obs = adversary(agent,obs,target_modality=target_modality)
+                    obs = adversary(agent, obs, target_modality=target_modality,
+                                    attack_choice=attack_choice, fgsm_eps=fgsm_eps)
 
                 #Repeat data collection steps on adversarial data
                 if(generate_dataset == True):
@@ -292,13 +296,27 @@ def main(cfg: DictConfig):
         print('Dataset Saved!')
         print('###############')
 
-def adversary(actor, obs, target_modality=None):
+def adversary(actor, obs, target_modality=None, attack_choice='FGSM', fgsm_eps=0.015):
 
     #print('ACTOR: ',actor)
     #print('OBSERVATION: ', obs.shape)
     #print('OUTPUT: ', actor(obs).shape)
 
-    obs = fgsm_attack(model=actor, input_vals=obs, eps=0.007, target_modality=target_modality)
+    choice = attack_choice.upper()
+
+    if choice == 'FGSM':
+        obs = fgsm_attack(model=actor, input_vals=obs, eps=fgsm_eps, target_modality=target_modality)
+    elif choice == 'ZEROOUT':
+        obs = zero_out_single_feature(actor, obs, target_modality=target_modality)
+    elif choice == 'RANDOMZEROOUT':
+        obs = zero_out_random_features(actor, obs, target_modality=target_modality)
+    elif choice == 'MODALITYZEROOUT':
+        if target_modality not in ['velocity', 'angular']:
+            raise ValueError("MODALITYZEROOUT requires TARGET_MODALITY to be 'velocity' or 'angular'")
+        obs = zero_out_modality(actor, obs, modality=target_modality)
+    else:
+        raise ValueError(f"Unknown ATTACK_CHOICE '{attack_choice}'. "
+                         "Valid options are 'FGSM', 'ZeroOut', 'RandomZeroOut', 'ModalityZeroOut'.")
 
     return obs
 
@@ -329,6 +347,68 @@ def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None)
 
     
     return perturbed_out#.detach()
+
+
+def zero_out_single_feature(model, input_vals, target_modality=None):
+    perturbed = input_vals.clone()
+    obs_dim = perturbed.size(0)
+
+    if target_modality == 'velocity':
+        feature_index = torch.randint(13, 19, (1,)).item()
+    elif target_modality == 'angular':
+        indices = []
+        for i in range(13):
+            indices.append(i)
+        for i in range(19, obs_dim):
+            indices.append(i)
+        idx_tensor = torch.tensor(indices)
+        rand_pos = torch.randint(0, idx_tensor.size(0), (1,)).item()
+        feature_index = idx_tensor[rand_pos].item()
+    else:
+        feature_index = torch.randint(0, obs_dim, (1,)).item()
+
+    perturbed[feature_index] = 0.0
+    return perturbed
+
+
+def zero_out_random_features(model, input_vals, target_modality=None):
+    perturbed = input_vals.clone()
+    obs_dim = perturbed.size(0)
+
+    if target_modality == 'velocity':
+        indices = []
+        for i in range(13, 19):
+            indices.append(i)
+    elif target_modality == 'angular':
+        indices = []
+        for i in range(13):
+            indices.append(i)
+        for i in range(19, obs_dim):
+            indices.append(i)
+    else:
+        indices = list(range(obs_dim))
+
+    idx_tensor = torch.tensor(indices)
+    num_candidates = idx_tensor.size(0)
+    num_features = torch.randint(1, num_candidates + 1, (1,)).item()
+
+    perm = torch.randperm(num_candidates)
+    chosen = idx_tensor[perm[:num_features]]
+    perturbed[chosen] = 0.0
+
+    return perturbed
+
+
+def zero_out_modality(model, input_vals, modality):
+    perturbed = input_vals.clone()
+    if modality == "velocity":
+        # indices 13 through 18 are velocity vectors
+        perturbed[13:19] = 0.0
+    elif modality == "angular":
+        # indices 0 through 12 and 19+ are angular components
+        perturbed[0:13] = 0.0
+        perturbed[19:] = 0.0
+    return perturbed
 
 
 def defender(defence=None, defence_model=None):

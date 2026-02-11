@@ -6,6 +6,9 @@ class adversarial_cfg():
         #Whether or not to use attack in testbed
         self.ENABLE_ATTACK = True
 
+        #Which attack to use, options are 'FGSM', 'ZeroOut', 'RandomZeroOut', and 'ModalityZeroOut'
+        self.ATTACK_CHOICE = 'FGSM'
+
         #Turns on dataset collection mode
         self.GENERATE_DATASET = False
         #Prefix for file name to save the dataset you generate
