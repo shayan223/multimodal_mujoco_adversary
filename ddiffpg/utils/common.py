@@ -184,9 +184,18 @@ class RewardCurveTracker:
             self._first_hit_threshold_step = step
 
         is_failure_this_eval = False
-        if ret_max > 0 and ret_mean < (ret_max * self.drop_threshold_pct):
-            self._drop_below_max_pct_count += 1
-            is_failure_this_eval = True
+        failure_condition = ret_max > 0 and ret_mean < (ret_max * self.drop_threshold_pct)
+
+        if failure_condition:
+            # If no min threshold is set, count failures from the very beginning.
+            if self.min_reward_threshold is None:
+                self._drop_below_max_pct_count += 1
+                is_failure_this_eval = True
+            else:
+                # Otherwise, only count failures after we've reached the min reward threshold.
+                if self._first_hit_threshold_step is not None and step >= self._first_hit_threshold_step:
+                    self._drop_below_max_pct_count += 1
+                    is_failure_this_eval = True
 
         steps = np.array(self._step_history)
         returns = np.array(self._return_history)
