@@ -275,6 +275,12 @@ def main(cfg: DictConfig):
     })
     wandb.log(summary_metrics)
 
+    # Log summary as a table so it appears in the run's Charts section
+    summary_columns = list(summary_metrics.keys())
+    summary_row = [summary_metrics[k] for k in summary_columns]
+    summary_table = wandb.Table(columns=summary_columns, data=[summary_row])
+    wandb.log({"run_summary": summary_table})
+
     #Save the collected dataset of observations
     if(generate_dataset == True):
         print('##############')

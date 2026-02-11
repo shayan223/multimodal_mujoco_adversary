@@ -170,7 +170,14 @@ def main(cfg: DictConfig):
 
 
     # Log run-level summary metrics for easy comparison across runs
-    wandb.log(reward_curve_tracker.summary_metrics())
+    summary_metrics = reward_curve_tracker.summary_metrics()
+    wandb.log(summary_metrics)
+
+    # Log summary as a table so it appears in the run's Charts section
+    summary_columns = list(summary_metrics.keys())
+    summary_row = [summary_metrics[k] for k in summary_columns]
+    summary_table = wandb.Table(columns=summary_columns, data=[summary_row])
+    wandb.log({"run_summary": summary_table})
 
 
 if __name__ == '__main__':
