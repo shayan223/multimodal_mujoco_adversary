@@ -266,7 +266,14 @@ def main(cfg: DictConfig):
             break
 
     # Log run-level summary metrics for easy comparison across runs
-    wandb.log(reward_curve_tracker.summary_metrics())
+    summary_metrics = reward_curve_tracker.summary_metrics()
+    # Add adversarial configuration info for tabular comparison
+    summary_metrics.update({
+        "summary/FGSM_MAGNITUDE": adv_cfg.FGSM_MAGNITUDE,
+        "summary/DEF_METHOD": defence_method,
+        "summary/TARGET_MODALITY": "both" if target_modality is None else target_modality,
+    })
+    wandb.log(summary_metrics)
 
     #Save the collected dataset of observations
     if(generate_dataset == True):
