@@ -1,50 +1,120 @@
+import itertools
+import os
+from copy import deepcopy
+from typing import Any, Dict, Optional, Tuple
 
 
-class adversarial_cfg():
-    def __init__(self):
+# Single source of truth; same values as the previous hardcoded __init__.
+_DEFAULT_ADV: Dict[str, Any] = {
+    # Whether or not to use attack in testbed
+    "ENABLE_ATTACK": True,
+    # Which attack to use: 'FGSM', 'ZeroOut', 'RandomZeroOut', 'ModalityZeroOut'
+    "ATTACK_CHOICE": "FGSM",
+    # Dataset collection mode
+    "GENERATE_DATASET": False,
+    "DATA_PREFIX": "fgsm015",
+    # 'VAE', 'VAE_3d', 'Gaussian', 'DDPM', or None
+    "DEF_METHOD": "DDPM",
+    "TRAIN_ON_DEF": False,
+    # None (both), 'velocity', or 'angular'
+    "TARGET_MODALITY": None,
+    "MAX_STEPS_OVERRIDE": 3000000,
+    "LEARNING_RATE": 1e-3,
+    "FGSM_MAGNITUDE": 0.015,
+    "SAVE_PATH": "/home/shayan/github/multimodal_mujoco_adversary/",
+}
 
-        #Whether or not to use attack in testbed
-        self.ENABLE_ATTACK = True
+# --- Full factorial grid (FGSM_MAGNITUDE x ATTACK_CHOICE x DEF_METHOD) ---
+# 2 * 4 * 5 = 40 presets. Names look like: m007_FGSM_none, m015_ModalityZeroOut_DDPM
+# ModalityZeroOut sets TARGET_MODALITY='velocity' (required by baselines_main.adversary).
+FGSM_MAGNITUDE_GRID: Tuple[float, ...] = (0.007, 0.015)
+ATTACK_CHOICE_GRID: Tuple[str, ...] = (
+    "FGSM",
+    "ZeroOut",
+    "RandomZeroOut",
+    "ModalityZeroOut",
+)
+# None = no defense; strings match DefenceObsWrapper / loader branches in baselines_main.
+DEF_METHOD_GRID: Tuple[Optional[str], ...] = (
+    None,
+    "VAE",
+    "VAE_3d",
+    "Gaussian",
+    "DDPM",
+)
 
-        #Which attack to use, options are 'FGSM', 'ZeroOut', 'RandomZeroOut', and 'ModalityZeroOut'
-        self.ATTACK_CHOICE = 'FGSM'
 
-        #Turns on dataset collection mode
-        self.GENERATE_DATASET = False
-        #Prefix for file name to save the dataset you generate
-        self.DATA_PREFIX = 'fgsm015'
+def _grid_preset_key(fgsm: float, attack: str, def_method: Optional[str]) -> str:
+    eps = "007" if abs(fgsm - 0.007) < 1e-12 else "015"
+    def_slug = "none" if def_method is None else def_method
+    return f"m{eps}_{attack}_{def_slug}"
 
-        #Select Defense method, current options are 'VAE', 'VAE_3d', 'Gaussian', 'DDPM', and None
-        self.DEF_METHOD = 'DDPM'
 
-        #Set to True if you want to apply defense modifications to the agent's observation during training
-        #Set to False to only make changes to the observation during evaluation
-        self.TRAIN_ON_DEF = False
+def _build_grid_presets() -> Dict[str, Dict[str, Any]]:
+    presets: Dict[str, Dict[str, Any]] = {}
+    for fgsm, attack, def_method in itertools.product(
+        FGSM_MAGNITUDE_GRID, ATTACK_CHOICE_GRID, DEF_METHOD_GRID
+    ):
+        name = _grid_preset_key(fgsm, attack, def_method)
+        entry: Dict[str, Any] = {
+            "FGSM_MAGNITUDE": fgsm,
+            "ATTACK_CHOICE": attack,
+            "DEF_METHOD": def_method,
+        }
+        if attack == "ModalityZeroOut":
+            entry["TARGET_MODALITY"] = "velocity"
+        presets[name] = entry
+    return presets
 
-        #Select the target modality, options are: None (will use both), 'velocity', or 'angular'
-        self.TARGET_MODALITY = None
 
-        #Override the max steps taken to train the agent (Defualt: 3 Million)
-        self.MAX_STEPS_OVERRIDE = 3000000
+_GRID_PRESETS = _build_grid_presets()
+GRID_PRESET_NAMES: Tuple[str, ...] = tuple(sorted(_GRID_PRESETS.keys()))
 
-        #Learning Rate for SAC agent
-        self.LEARNING_RATE = 1e-3
+# Partial overrides. Pick with: ADV_PRESET=name or adversarial_cfg(preset="name").
+ADV_PRESETS: Dict[str, Dict[str, Any]] = {
+    "default": {},
+    "no_attack": {"ENABLE_ATTACK": False},
+    **_GRID_PRESETS,
+}
 
-        #Epsilon value for scaling FGSM attacks
-        self.FGSM_MAGNITUDE = 0.015
 
-        #directory to save vae model weights and dataset
-        #Please end in '/' directory indicator
-        self.SAVE_PATH = '/home/shayan/github/multimodal_mujoco_adversary/'
+def _resolve_preset_name(preset: Optional[str]) -> str:
+    if preset is not None:
+        return preset.strip()
+    return os.environ.get("ADV_PRESET", "default").strip()
 
-        if(self.SAVE_PATH == '/path/to/github/multimodal_mujoco_adversary/'):
-            print('#####################')
-            print('WARNING: SAVE_PATH not set. Set it to absolute path to the repository directory. Please update it in scripts/ADVERSARIAL_CONFIGS.py')
-            print('#####################')
-        if(self.SAVE_PATH[-1] != '/'):
-            print('#####################')
-            print('WARNING: File Path does not end with "/". adding one for you. Please double check its correctness.')
-            self.SAVE_PATH += '/'
-            print('#####################')
-        
 
+def _merged_adv(preset_name: str) -> Dict[str, Any]:
+    if preset_name not in ADV_PRESETS:
+        valid = ", ".join(sorted(ADV_PRESETS.keys()))
+        raise ValueError(
+            f"Unknown adversarial preset {preset_name!r}. Valid presets: {valid}"
+        )
+    merged = deepcopy(_DEFAULT_ADV)
+    merged.update(ADV_PRESETS[preset_name])
+    return merged
+
+
+class adversarial_cfg:
+    def __init__(self, preset: Optional[str] = None):
+        name = _resolve_preset_name(preset)
+        merged = _merged_adv(name)
+        self.PRESET_NAME = name
+        for key, value in merged.items():
+            setattr(self, key, value)
+
+        if self.SAVE_PATH == "/path/to/github/multimodal_mujoco_adversary/":
+            print("#####################")
+            print(
+                "WARNING: SAVE_PATH not set. Set it to absolute path to the repository "
+                "directory. Please update _DEFAULT_ADV in scripts/ADVERSARIAL_CONFIGS.py"
+            )
+            print("#####################")
+        if self.SAVE_PATH[-1] != "/":
+            print("#####################")
+            print(
+                'WARNING: File Path does not end with "/". adding one for you. '
+                "Please double check its correctness."
+            )
+            self.SAVE_PATH += "/"
+            print("#####################")

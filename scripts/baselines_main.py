@@ -40,8 +40,9 @@ def main(cfg: DictConfig):
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
     wandb_run = init_wandb(cfg)
-    
+
     adv_cfg = adversarial_cfg()
+    wandb.config.update({"adv_preset": adv_cfg.PRESET_NAME})
     generate_dataset = adv_cfg.GENERATE_DATASET
     defence_method = adv_cfg.DEF_METHOD
     train_on_defense = adv_cfg.TRAIN_ON_DEF
@@ -511,7 +512,4 @@ class DefenceObsWrapper:
 
 
 if __name__ == '__main__':
-
-    adv_cfg = adversarial_cfg()
-
     main()
