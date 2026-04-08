@@ -38,7 +38,7 @@ ATTACK_CHOICE_GRID: Tuple[str, ...] = (
 DEF_METHOD_GRID: Tuple[Optional[str], ...] = (
     None,
     "VAE",
-    "VAE_3d",
+    #"VAE_3d",
     "Gaussian",
     "DDPM",
 )

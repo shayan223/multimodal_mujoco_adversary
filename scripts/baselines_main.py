@@ -66,23 +66,22 @@ def main(cfg: DictConfig):
 
         env = gym.vector.make(cfg.env.name, reward_type=cfg.env.reward_type, num_envs=cfg.num_envs, random_init=cfg.env.random_init)
         print('CURRENT ENV TYPE: ', type(env))
-        if(defence_method == 'VAE_3d'):
+        def_model = None
+        if defence_method == 'VAE_3d':
             def_model = VAE_3d()
             def_model.load_state_dict(torch.load(save_path+'defence_vae.pth', weights_only=True))
             def_model.eval()
             def_model = def_model.to(device)
-        if(defence_method == 'VAE'):
+        elif defence_method == 'VAE':
             def_model = VAE_simple()
             def_model.load_state_dict(torch.load(save_path+'defence_vae.pth', weights_only=True))
             def_model.eval()
             def_model = def_model.to(device)
-        if(defence_method == 'DDPM'):
+        elif defence_method == 'DDPM':
             def_model = Diffusion_model(experiment_name='diffusion_defense_1')
             def_model.load_params()
             #def_model.eval()
             #def_model = def_model.to(device)
-        else:
-            def_model=None
         #Here we wrap the env to include our defense method in training
         if(defence_method is not None) and (train_on_defense == True):
             env = DefenceObsWrapper(env, episode_len, defence_method,defence_model=def_model)
@@ -446,7 +445,8 @@ def defender(defence=None, defence_model=None):
             obs = obs[:, :N] #remove the padding
 
             return obs
-        
+        return vae_defend
+
     if(defence == 'VAE'):
         def vae_defend(obs):
             obs = torch.Tensor(obs).to(device)
