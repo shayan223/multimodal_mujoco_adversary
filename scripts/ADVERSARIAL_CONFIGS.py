@@ -24,9 +24,10 @@ _DEFAULT_ADV: Dict[str, Any] = {
     "SAVE_PATH": "/home/shayan/github/multimodal_mujoco_adversary/",
 }
 
-# --- Full factorial grid (FGSM_MAGNITUDE x ATTACK_CHOICE x DEF_METHOD) ---
-# 2 * 4 * 5 = 40 presets. Names look like: m007_FGSM_none, m015_ModalityZeroOut_DDPM
-# ModalityZeroOut sets TARGET_MODALITY='velocity' (required by baselines_main.adversary).
+# --- Full factorial grid over magnitude, attack, modality, and defense ---
+# FGSM / ZeroOut / RandomZeroOut sweep both + targeted modalities.
+# ModalityZeroOut only sweeps targeted modalities because "both" is not a valid mode there.
+# Names look like: m007_FGSM_velocity_none, m015_ModalityZeroOut_angular_DDPM
 FGSM_MAGNITUDE_GRID: Tuple[float, ...] = (0.007, 0.015)
 ATTACK_CHOICE_GRID: Tuple[str, ...] = (
     "FGSM",
@@ -34,6 +35,12 @@ ATTACK_CHOICE_GRID: Tuple[str, ...] = (
     "RandomZeroOut",
     "ModalityZeroOut",
 )
+ATTACK_MODALITY_GRID: Dict[str, Tuple[Optional[str], ...]] = {
+    "FGSM": (None, "velocity", "angular"),
+    "ZeroOut": (None, "velocity", "angular"),
+    "RandomZeroOut": (None, "velocity", "angular"),
+    "ModalityZeroOut": ("velocity", "angular"),
+}
 # None = no defense; strings match DefenceObsWrapper / loader branches in baselines_main.
 DEF_METHOD_GRID: Tuple[Optional[str], ...] = (
     None,
@@ -44,26 +51,32 @@ DEF_METHOD_GRID: Tuple[Optional[str], ...] = (
 )
 
 
-def _grid_preset_key(fgsm: float, attack: str, def_method: Optional[str]) -> str:
+def _grid_preset_key(
+    fgsm: float,
+    attack: str,
+    target_modality: Optional[str],
+    def_method: Optional[str],
+) -> str:
     eps = "007" if abs(fgsm - 0.007) < 1e-12 else "015"
+    modality_slug = "both" if target_modality is None else target_modality
     def_slug = "none" if def_method is None else def_method
-    return f"m{eps}_{attack}_{def_slug}"
+    return f"m{eps}_{attack}_{modality_slug}_{def_slug}"
 
 
 def _build_grid_presets() -> Dict[str, Dict[str, Any]]:
     presets: Dict[str, Dict[str, Any]] = {}
-    for fgsm, attack, def_method in itertools.product(
-        FGSM_MAGNITUDE_GRID, ATTACK_CHOICE_GRID, DEF_METHOD_GRID
-    ):
-        name = _grid_preset_key(fgsm, attack, def_method)
-        entry: Dict[str, Any] = {
-            "FGSM_MAGNITUDE": fgsm,
-            "ATTACK_CHOICE": attack,
-            "DEF_METHOD": def_method,
-        }
-        if attack == "ModalityZeroOut":
-            entry["TARGET_MODALITY"] = "velocity"
-        presets[name] = entry
+    for fgsm, attack in itertools.product(FGSM_MAGNITUDE_GRID, ATTACK_CHOICE_GRID):
+        for target_modality, def_method in itertools.product(
+            ATTACK_MODALITY_GRID[attack], DEF_METHOD_GRID
+        ):
+            name = _grid_preset_key(fgsm, attack, target_modality, def_method)
+            entry: Dict[str, Any] = {
+                "FGSM_MAGNITUDE": fgsm,
+                "ATTACK_CHOICE": attack,
+                "DEF_METHOD": def_method,
+                "TARGET_MODALITY": target_modality,
+            }
+            presets[name] = entry
     return presets
 
 
