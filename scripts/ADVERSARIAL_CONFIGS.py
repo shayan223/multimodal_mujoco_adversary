@@ -118,3 +118,25 @@ class adversarial_cfg:
             )
             self.SAVE_PATH += "/"
             print("#####################")
+
+
+def build_adv_wandb_metadata(adv_cfg: adversarial_cfg, seed: Any) -> Dict[str, Any]:
+    target_modality = "both" if adv_cfg.TARGET_MODALITY is None else str(adv_cfg.TARGET_MODALITY)
+    attack_type = str(adv_cfg.ATTACK_CHOICE)
+    defense_type = "none" if adv_cfg.DEF_METHOD is None else str(adv_cfg.DEF_METHOD)
+    fgsm_magnitude = float(adv_cfg.FGSM_MAGNITUDE)
+    fgsm_magnitude_display = f"{fgsm_magnitude:.3f}".rstrip("0").rstrip(".")
+    run_name_base = f"{adv_cfg.PRESET_NAME}_{target_modality}_seed{seed}"
+
+    return {
+        "adv_preset": adv_cfg.PRESET_NAME,
+        "attack_type": attack_type,
+        "defense_type": defense_type,
+        "target_modality": target_modality,
+        "target_modality_display": target_modality,
+        "fgsm_magnitude": fgsm_magnitude,
+        "fgsm_magnitude_display": fgsm_magnitude_display,
+        "enable_attack": bool(adv_cfg.ENABLE_ATTACK),
+        "train_on_defense": bool(adv_cfg.TRAIN_ON_DEF),
+        "run_name_base": run_name_base,
+    }

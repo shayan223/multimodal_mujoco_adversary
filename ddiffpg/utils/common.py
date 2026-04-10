@@ -15,22 +15,40 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-def init_wandb(cfg):
+def init_wandb(cfg, run_name_base=None, config_updates=None):
     wandb_cfg = OmegaConf.to_container(cfg, resolve=True,
                                        throw_on_missing=True)
     wandb_cfg['hostname'] = platform.node()
-    wandb_kwargs = cfg.logging.wandb
+    if config_updates:
+        wandb_cfg.update(config_updates)
+    wandb_kwargs = OmegaConf.to_container(cfg.logging.wandb, resolve=True)
     wandb_tags = wandb_kwargs.get('tags', None)
     if wandb_tags is not None and isinstance(wandb_tags, str):
         wandb_kwargs['tags'] = [wandb_tags]
+    if run_name_base is not None:
+        wandb_kwargs['name'] = run_name_base
     if cfg.artifact is not None:
         wandb_id = cfg.artifact.split("/")[-1].split(":")[0]
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg, id=wandb_id, resume="must")
     else:
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg)
+    if run_name_base is not None:
+        final_run_name = f"{run_name_base}__{wandb_run.id}"
+        wandb_run.name = final_run_name
+        wandb.config.update({
+            "run_name_base": run_name_base,
+            "run_name": final_run_name,
+        }, allow_val_change=True)
+        wandb_run.summary["run_name_base"] = run_name_base
+        wandb_run.summary["run_name"] = final_run_name
     logger.warning(f'Wandb run dir:{wandb_run.dir}')
     logger.warning(f'Project name:{wandb_run.project_name()}')
     return wandb_run
+
+
+def update_wandb_summary(wandb_run, summary_updates):
+    for key, value in summary_updates.items():
+        wandb_run.summary[key] = value
 
 
 def preprocess_cfg(cfg, if_ddiffpg=True):

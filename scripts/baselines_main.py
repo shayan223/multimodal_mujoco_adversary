@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 import ddiffpg
 from ddiffpg.algo import alg_name_to_path
 from ddiffpg.utils.common import init_wandb
+from ddiffpg.utils.common import update_wandb_summary
 from ddiffpg.replay.simple_replay import ReplayBuffer
 from ddiffpg.utils.common import load_class_from_path
 from ddiffpg.utils.common import set_random_seed
@@ -28,7 +29,7 @@ from gymnasium import ObservationWrapper
 
 from defense_vae import VAE_3d, VAE_simple
 
-from ADVERSARIAL_CONFIGS import adversarial_cfg
+from ADVERSARIAL_CONFIGS import adversarial_cfg, build_adv_wandb_metadata
 
 from diffusion import Diffusion_model
 
@@ -39,10 +40,29 @@ def main(cfg: DictConfig):
     cfg = preprocess_cfg(cfg, if_ddiffpg=False)
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
-    wandb_run = init_wandb(cfg)
-
     adv_cfg = adversarial_cfg()
-    wandb.config.update({"adv_preset": adv_cfg.PRESET_NAME})
+    adv_wandb_metadata = build_adv_wandb_metadata(adv_cfg, cfg.seed)
+    adv_wandb_metadata.update({
+        "algo_name": cfg.algo.name,
+        "env_name": cfg.env.name,
+    })
+    wandb_run = init_wandb(
+        cfg,
+        run_name_base=adv_wandb_metadata["run_name_base"],
+        config_updates=adv_wandb_metadata,
+    )
+    wandb.config.update(adv_wandb_metadata, allow_val_change=True)
+    update_wandb_summary(wandb_run, {
+        "adv_preset": adv_wandb_metadata["adv_preset"],
+        "attack_type": adv_wandb_metadata["attack_type"],
+        "defense_type": adv_wandb_metadata["defense_type"],
+        "target_modality": adv_wandb_metadata["target_modality"],
+        "fgsm_magnitude": adv_wandb_metadata["fgsm_magnitude"],
+        "enable_attack": adv_wandb_metadata["enable_attack"],
+        "train_on_defense": adv_wandb_metadata["train_on_defense"],
+        "algo_name": adv_wandb_metadata["algo_name"],
+        "env_name": adv_wandb_metadata["env_name"],
+    })
     generate_dataset = adv_cfg.GENERATE_DATASET
     defence_method = adv_cfg.DEF_METHOD
     train_on_defense = adv_cfg.TRAIN_ON_DEF
@@ -273,17 +293,18 @@ def main(cfg: DictConfig):
     summary_metrics = reward_curve_tracker.summary_metrics()
     # Add adversarial configuration info for tabular comparison
     summary_metrics.update({
-        "summary/FGSM_MAGNITUDE": adv_cfg.FGSM_MAGNITUDE,
-        "summary/DEF_METHOD": defence_method,
-        "summary/TARGET_MODALITY": "both" if target_modality is None else target_modality,
+        "adv_preset": adv_wandb_metadata["adv_preset"],
+        "attack_type": adv_wandb_metadata["attack_type"],
+        "defense_type": adv_wandb_metadata["defense_type"],
+        "target_modality": adv_wandb_metadata["target_modality"],
+        "fgsm_magnitude": adv_wandb_metadata["fgsm_magnitude"],
+        "enable_attack": adv_wandb_metadata["enable_attack"],
+        "train_on_defense": adv_wandb_metadata["train_on_defense"],
+        "algo_name": adv_wandb_metadata["algo_name"],
+        "env_name": adv_wandb_metadata["env_name"],
+        "run_name_base": adv_wandb_metadata["run_name_base"],
     })
-    wandb.log(summary_metrics)
-
-    # Log summary as a table so it appears in the run's Charts section
-    summary_columns = list(summary_metrics.keys())
-    summary_row = [summary_metrics[k] for k in summary_columns]
-    summary_table = wandb.Table(columns=summary_columns, data=[summary_row])
-    wandb.log({"run_summary": summary_table})
+    update_wandb_summary(wandb_run, summary_metrics)
 
     #Save the collected dataset of observations
     if(generate_dataset == True):

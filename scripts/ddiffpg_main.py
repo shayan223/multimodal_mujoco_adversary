@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 import ddiffpg
 from ddiffpg.algo import alg_name_to_path
 from ddiffpg.utils.common import init_wandb
+from ddiffpg.utils.common import update_wandb_summary
 from ddiffpg.utils.common import load_class_from_path
 from ddiffpg.utils.common import set_random_seed
 from ddiffpg.utils.common import capture_keyboard_interrupt
@@ -171,13 +172,7 @@ def main(cfg: DictConfig):
 
     # Log run-level summary metrics for easy comparison across runs
     summary_metrics = reward_curve_tracker.summary_metrics()
-    wandb.log(summary_metrics)
-
-    # Log summary as a table so it appears in the run's Charts section
-    summary_columns = list(summary_metrics.keys())
-    summary_row = [summary_metrics[k] for k in summary_columns]
-    summary_table = wandb.Table(columns=summary_columns, data=[summary_row])
-    wandb.log({"run_summary": summary_table})
+    update_wandb_summary(wandb_run, summary_metrics)
 
 
 if __name__ == '__main__':
