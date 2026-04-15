@@ -1,4 +1,5 @@
 from itertools import count
+import json
 import hydra
 import wandb
 import gym
@@ -66,6 +67,12 @@ def main(cfg: DictConfig):
     generate_dataset = adv_cfg.GENERATE_DATASET
     defence_method = adv_cfg.DEF_METHOD
     train_on_defense = adv_cfg.TRAIN_ON_DEF
+    defense_mode = adv_cfg.DEFENSE_MODE
+    enable_defense_train = adv_cfg.ENABLE_DEFENSE_TRAIN
+    enable_defense_eval = adv_cfg.ENABLE_DEFENSE_EVAL
+    ddpm_experiment_name = adv_cfg.DDPM_EXPERIMENT_NAME
+    ddpm_renoise_strength = adv_cfg.DDPM_RENOISE_STRENGTH
+    ddpm_inference_steps = adv_cfg.DDPM_INFERENCE_STEPS
     target_modality = adv_cfg.TARGET_MODALITY
     data_prefix = adv_cfg.DATA_PREFIX
     max_steps_override = adv_cfg.MAX_STEPS_OVERRIDE
@@ -98,12 +105,20 @@ def main(cfg: DictConfig):
             def_model.eval()
             def_model = def_model.to(device)
         elif defence_method == 'DDPM':
-            def_model = Diffusion_model(experiment_name='diffusion_defense_1')
+            def_model = Diffusion_model(
+                experiment_name=ddpm_experiment_name,
+                inference_mode=defense_mode,
+                inference_steps=ddpm_inference_steps,
+                renoise_strength=ddpm_renoise_strength,
+            )
             def_model.load_params()
-            #def_model.eval()
-            #def_model = def_model.to(device)
+            def_model.set_inference_config(
+                mode=defense_mode,
+                steps=ddpm_inference_steps,
+                renoise_strength=ddpm_renoise_strength,
+            )
         #Here we wrap the env to include our defense method in training
-        if(defence_method is not None) and (train_on_defense == True):
+        if(defence_method is not None) and enable_defense_train and (train_on_defense == True):
             env = DefenceObsWrapper(env, episode_len, defence_method,defence_model=def_model)
 
         else:
@@ -172,6 +187,9 @@ def main(cfg: DictConfig):
             current_lengths = torch.zeros(num_envs, dtype=torch.float32, device=cfg.device)
             traj_states = []
             obs = eval_env.reset()
+            defence_func = None
+            if(defence_method is not None) and enable_defense_eval:
+                defence_func = defender(defence=defence_method, defence_model=def_model)
             for i_step in range(max_step):  # run an episode
 
                 ######## Adversarial injection ##########
@@ -201,9 +219,8 @@ def main(cfg: DictConfig):
                     buffer_list = [row.detach().cpu().numpy() for row in buffer_obs]
                     dataset_adv_buffer.extend(buffer_list)
                 
-                if(defence_method is not None):
+                if defence_func is not None:
                     ######## Defence purification ##########
-                    defence_func = defender(defence=defence_method,defence_model=def_model)
                     obs = defence_func(obs)
 
                 #########################################
@@ -314,6 +331,22 @@ def main(cfg: DictConfig):
         benign_dataset_df.to_csv(save_path+data_prefix+'_benign_obs_data.csv')
         adv_dataset_df = pd.DataFrame(adv_dataset)
         adv_dataset_df.to_csv(save_path+data_prefix+'_adversarial_obs_data.csv')
+        dataset_metadata = {
+            "data_prefix": data_prefix,
+            "attack_choice": attack_choice,
+            "target_modality": target_modality,
+            "fgsm_magnitude": fgsm_eps,
+            "defense_method": defence_method,
+            "train_on_defense": train_on_defense,
+            "defense_mode": defense_mode,
+            "enable_defense_train": enable_defense_train,
+            "enable_defense_eval": enable_defense_eval,
+            "num_benign_rows": len(benign_dataset),
+            "num_adversarial_rows": len(adv_dataset),
+            "save_path": save_path,
+        }
+        with open(save_path+data_prefix+'_metadata.json', 'w', encoding='utf-8') as metadata_file:
+            json.dump(dataset_metadata, metadata_file, indent=2)
         print('Dataset Saved!')
         print('###############')
 
@@ -356,12 +389,12 @@ def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None)
     #modify just one modality (13 through 18 are velocity vectors)
     if(target_modality == 'velocity'):
         targeted_features = input_vals.clone()
-        targeted_features[13:19] += eps*input_vals.grad[13:19].sign()
+        targeted_features[..., 13:19] += eps*input_vals.grad[..., 13:19].sign()
         perturbed_out = targeted_features
-    if(target_modality == 'angular'):
+    elif(target_modality == 'angular'):
         targeted_features = input_vals.clone()
-        targeted_features[0:13] += eps*input_vals.grad[0:13].sign()
-        targeted_features[19:] += eps*input_vals.grad[19:].sign()
+        targeted_features[..., 0:13] += eps*input_vals.grad[..., 0:13].sign()
+        targeted_features[..., 19:] += eps*input_vals.grad[..., 19:].sign()
         perturbed_out = targeted_features
     else:
         perturbed_out = input_vals + eps*input_vals.grad.sign()
@@ -483,6 +516,50 @@ def defender(defence=None, defence_model=None):
             obs = defence_model.inference(obs)
             return obs
         return ddpm_defend
+
+    raise ValueError(f"Unknown defense method: {defence}")
+
+
+def validate_attack_targeting(
+    original_obs: torch.Tensor,
+    perturbed_obs: torch.Tensor,
+    target_modality=None,
+    attack_choice='FGSM',
+):
+    changed = (perturbed_obs - original_obs).abs() > 1e-8
+    if changed.dim() > 1:
+        changed_any = changed.any(dim=0)
+    else:
+        changed_any = changed
+
+    changed_indices = torch.where(changed_any)[0].detach().cpu().tolist()
+
+    if attack_choice.upper() != 'FGSM':
+        return {
+            "attack_choice": attack_choice,
+            "target_modality": target_modality,
+            "changed_indices": changed_indices,
+        }
+
+    if target_modality == 'velocity':
+        expected = set(range(13, 19))
+    elif target_modality == 'angular':
+        expected = set(list(range(13)) + list(range(19, original_obs.shape[-1])))
+    else:
+        expected = set(range(original_obs.shape[-1]))
+
+    actual = set(changed_indices)
+    unexpected = sorted(actual - expected)
+    missing = sorted(expected - actual) if target_modality is not None else []
+
+    return {
+        "attack_choice": attack_choice,
+        "target_modality": target_modality,
+        "changed_indices": changed_indices,
+        "unexpected_indices": unexpected,
+        "missing_expected_indices": missing,
+        "targeting_valid": len(unexpected) == 0,
+    }
 
 
 

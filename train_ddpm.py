@@ -10,7 +10,15 @@ def main(args):
     #Create experiment directory
     Path('./Experiments/'+experiment_name).mkdir(parents=True, exist_ok=True)
     #Use debug to stop after running 10 samples, for debugging purposes
-    diff_model = Diffusion_model(experiment_name,debug=args.debug)
+    diff_model = Diffusion_model(
+        experiment_name,
+        debug=args.debug,
+        inference_mode=args.mode,
+        inference_steps=args.inference_steps,
+        renoise_strength=args.renoise_strength,
+        benign_csv=args.benign_csv,
+        adversarial_csv=args.adversarial_csv,
+    )
     #Check experiment progress and load
     print('##############################')
     if os.path.exists(diff_model.checkpoint_path):
@@ -40,7 +48,18 @@ if __name__ == '__main__':
     parser.add_argument('--sample',action='store_true', default=False,
                         help='Performs origin sampling on model')
     parser.add_argument('--debug',action='store_true', default=False,
-                        help='runs model in debug mode (each epoch will run only 1 batch to verify process)')                        
+                        help='runs model in debug mode (each epoch will run only 1 batch to verify process)')
+    parser.add_argument('--mode', type=str, default='stochastic_light',
+                        choices=['deterministic', 'stochastic_light', 'stochastic_heavy'],
+                        help='Runtime inference mode to store with the DDPM defense.')
+    parser.add_argument('--inference_steps', type=int, default=3,
+                        help='Number of denoising steps to use at inference time.')
+    parser.add_argument('--renoise_strength', type=float, default=1.0,
+                        help='Strength of re-noising during stochastic inference.')
+    parser.add_argument('--benign_csv', type=str, default=None,
+                        help='Optional benign CSV override.')
+    parser.add_argument('--adversarial_csv', type=str, default=None,
+                        help='Optional adversarial CSV override.')
     args = parser.parse_args()
 
     main(args)

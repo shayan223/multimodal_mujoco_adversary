@@ -16,6 +16,16 @@ _DEFAULT_ADV: Dict[str, Any] = {
     # 'VAE', 'VAE_3d', 'Gaussian', 'DDPM', or None
     "DEF_METHOD": "DDPM",
     "TRAIN_ON_DEF": False,
+    # Defense runtime modes:
+    # deterministic, stochastic_light, stochastic_heavy
+    "DEFENSE_MODE": "stochastic_light",
+    # Whether to apply the defense path during training/eval loops when a defense exists.
+    "ENABLE_DEFENSE_TRAIN": True,
+    "ENABLE_DEFENSE_EVAL": True,
+    # DDPM-specific runtime controls
+    "DDPM_EXPERIMENT_NAME": "diffusion_defense_1",
+    "DDPM_RENOISE_STRENGTH": 1.0,
+    "DDPM_INFERENCE_STEPS": 3,
     # None (both), 'velocity', or 'angular'
     "TARGET_MODALITY": None,
     "MAX_STEPS_OVERRIDE": 3000000,
@@ -49,6 +59,7 @@ DEF_METHOD_GRID: Tuple[Optional[str], ...] = (
     "Gaussian",
     "DDPM",
 )
+TRAIN_ON_DEF_GRID: Tuple[bool, ...] = (False, True)
 
 
 def _grid_preset_key(
@@ -66,15 +77,20 @@ def _grid_preset_key(
 def _build_grid_presets() -> Dict[str, Dict[str, Any]]:
     presets: Dict[str, Dict[str, Any]] = {}
     for fgsm, attack in itertools.product(FGSM_MAGNITUDE_GRID, ATTACK_CHOICE_GRID):
-        for target_modality, def_method in itertools.product(
-            ATTACK_MODALITY_GRID[attack], DEF_METHOD_GRID
+        for target_modality, def_method, train_on_def in itertools.product(
+            ATTACK_MODALITY_GRID[attack], DEF_METHOD_GRID, TRAIN_ON_DEF_GRID
         ):
+            if def_method is None and train_on_def:
+                continue
             name = _grid_preset_key(fgsm, attack, target_modality, def_method)
+            if train_on_def:
+                name = f"{name}_trainDef"
             entry: Dict[str, Any] = {
                 "FGSM_MAGNITUDE": fgsm,
                 "ATTACK_CHOICE": attack,
                 "DEF_METHOD": def_method,
                 "TARGET_MODALITY": target_modality,
+                "TRAIN_ON_DEF": train_on_def,
             }
             presets[name] = entry
     return presets
@@ -108,10 +124,39 @@ def _merged_adv(preset_name: str) -> Dict[str, Any]:
     return merged
 
 
+def _parse_bool(raw: str) -> bool:
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _coerce_override(raw: str, current: Any) -> Any:
+    if current is None:
+        stripped = raw.strip()
+        if stripped.lower() == "none":
+            return None
+        return stripped
+    if isinstance(current, bool):
+        return _parse_bool(raw)
+    if isinstance(current, int) and not isinstance(current, bool):
+        return int(raw)
+    if isinstance(current, float):
+        return float(raw)
+    return raw.strip()
+
+
+def _apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
+    merged = deepcopy(config)
+    for key, value in list(merged.items()):
+        env_key = f"ADV_{key}"
+        if env_key in os.environ:
+            merged[key] = _coerce_override(os.environ[env_key], value)
+    return merged
+
+
 class adversarial_cfg:
     def __init__(self, preset: Optional[str] = None):
         name = _resolve_preset_name(preset)
         merged = _merged_adv(name)
+        merged = _apply_env_overrides(merged)
         self.PRESET_NAME = name
         for key, value in merged.items():
             setattr(self, key, value)
@@ -151,5 +196,10 @@ def build_adv_wandb_metadata(adv_cfg: adversarial_cfg, seed: Any) -> Dict[str, A
         "fgsm_magnitude_display": fgsm_magnitude_display,
         "enable_attack": bool(adv_cfg.ENABLE_ATTACK),
         "train_on_defense": bool(adv_cfg.TRAIN_ON_DEF),
+        "defense_mode": str(adv_cfg.DEFENSE_MODE),
+        "enable_defense_train": bool(adv_cfg.ENABLE_DEFENSE_TRAIN),
+        "enable_defense_eval": bool(adv_cfg.ENABLE_DEFENSE_EVAL),
+        "ddpm_renoise_strength": float(adv_cfg.DDPM_RENOISE_STRENGTH),
+        "ddpm_inference_steps": int(adv_cfg.DDPM_INFERENCE_STEPS),
         "run_name_base": run_name_base,
     }
