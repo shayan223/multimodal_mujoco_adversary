@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run baselines_main.py for every ADVERSARIAL_CONFIGS grid preset (ADV_PRESET),
-# plus the explicit no_attack baseline.
+# plus the no-attack defense matrix.
 # Usage (from repo root):
 #   ./scripts/run_baselines_grid.sh
 #   ./scripts/run_baselines_grid.sh seed=123
@@ -15,7 +15,7 @@ export PYTHONPATH="${REPO_ROOT}/scripts${PYTHONPATH:+:$PYTHONPATH}"
 
 DEFAULT_HYDRA=(algo=sac_algo env.name=antmaze-v1)
 
-PRESETS="$(python3 -c "from ADVERSARIAL_CONFIGS import GRID_PRESET_NAMES; print(' '.join(('no_attack',) + GRID_PRESET_NAMES))")"
+PRESETS="$(python3 -c "from ADVERSARIAL_CONFIGS import GRID_PRESET_NAMES, NO_ATTACK_PRESET_NAMES; print(' '.join(NO_ATTACK_PRESET_NAMES + GRID_PRESET_NAMES))")"
 
 for p in ${PRESETS}; do
   echo "========================================"

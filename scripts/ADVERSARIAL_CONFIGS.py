@@ -99,10 +99,38 @@ def _build_grid_presets() -> Dict[str, Dict[str, Any]]:
 _GRID_PRESETS = _build_grid_presets()
 GRID_PRESET_NAMES: Tuple[str, ...] = tuple(sorted(_GRID_PRESETS.keys()))
 
+
+def _build_no_attack_presets() -> Dict[str, Dict[str, Any]]:
+    presets: Dict[str, Dict[str, Any]] = {}
+    for def_method, train_on_def in itertools.product(DEF_METHOD_GRID, TRAIN_ON_DEF_GRID):
+        if def_method is None and train_on_def:
+            continue
+
+        if def_method is None:
+            name = "no_attack_none"
+        else:
+            name = f"no_attack_{def_method}"
+            if train_on_def:
+                name = f"{name}_trainDef"
+
+        presets[name] = {
+            "ENABLE_ATTACK": False,
+            "DEF_METHOD": def_method,
+            "TRAIN_ON_DEF": train_on_def,
+            "TARGET_MODALITY": None,
+        }
+
+    return presets
+
+
+_NO_ATTACK_PRESETS = _build_no_attack_presets()
+NO_ATTACK_PRESET_NAMES: Tuple[str, ...] = tuple(sorted(_NO_ATTACK_PRESETS.keys()))
+
 # Partial overrides. Pick with: ADV_PRESET=name or adversarial_cfg(preset="name").
 ADV_PRESETS: Dict[str, Dict[str, Any]] = {
     "default": {},
-    "no_attack": {"ENABLE_ATTACK": False},
+    "no_attack": deepcopy(_NO_ATTACK_PRESETS["no_attack_DDPM"]),
+    **_NO_ATTACK_PRESETS,
     **_GRID_PRESETS,
 }
 
