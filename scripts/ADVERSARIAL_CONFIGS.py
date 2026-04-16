@@ -59,7 +59,10 @@ DEF_METHOD_GRID: Tuple[Optional[str], ...] = (
     "Gaussian",
     "DDPM",
 )
-TRAIN_ON_DEF_GRID: Tuple[bool, ...] = (False, True)
+TRAIN_ON_DEF_GRID: Tuple[bool, ...] = (
+    # False,
+    True,
+)
 
 
 def _grid_preset_key(
@@ -129,7 +132,7 @@ NO_ATTACK_PRESET_NAMES: Tuple[str, ...] = tuple(sorted(_NO_ATTACK_PRESETS.keys()
 # Partial overrides. Pick with: ADV_PRESET=name or adversarial_cfg(preset="name").
 ADV_PRESETS: Dict[str, Dict[str, Any]] = {
     "default": {},
-    "no_attack": deepcopy(_NO_ATTACK_PRESETS["no_attack_DDPM"]),
+    "no_attack": deepcopy(_NO_ATTACK_PRESETS["no_attack_DDPM_trainDef"]),
     **_NO_ATTACK_PRESETS,
     **_GRID_PRESETS,
 }
