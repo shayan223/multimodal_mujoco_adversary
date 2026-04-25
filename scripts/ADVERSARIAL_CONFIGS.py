@@ -38,7 +38,7 @@ _DEFAULT_ADV: Dict[str, Any] = {
 # FGSM / ZeroOut / RandomZeroOut sweep both + targeted modalities.
 # ModalityZeroOut only sweeps targeted modalities because "both" is not a valid mode there.
 # Names look like: m007_FGSM_velocity_none, m015_ModalityZeroOut_angular_DDPM
-FGSM_MAGNITUDE_GRID: Tuple[float, ...] = (0.015)# , 0.007)
+FGSM_MAGNITUDE_GRID: Tuple[float, ...] = (0.015, )# 0.007)
 ATTACK_CHOICE_GRID: Tuple[str, ...] = (
     "FGSM",
     "ZeroOut",
