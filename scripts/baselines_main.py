@@ -405,7 +405,7 @@ def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None)
 
 def zero_out_single_feature(model, input_vals, target_modality=None):
     perturbed = input_vals.clone()
-    obs_dim = perturbed.size(0)
+    obs_dim = perturbed.shape[-1]
 
     if target_modality == 'velocity':
         feature_index = torch.randint(13, 19, (1,)).item()
@@ -421,13 +421,13 @@ def zero_out_single_feature(model, input_vals, target_modality=None):
     else:
         feature_index = torch.randint(0, obs_dim, (1,)).item()
 
-    perturbed[feature_index] = 0.0
+    perturbed[..., feature_index] = 0.0
     return perturbed
 
 
 def zero_out_random_features(model, input_vals, target_modality=None):
     perturbed = input_vals.clone()
-    obs_dim = perturbed.size(0)
+    obs_dim = perturbed.shape[-1]
 
     if target_modality == 'velocity':
         indices = []
@@ -442,13 +442,13 @@ def zero_out_random_features(model, input_vals, target_modality=None):
     else:
         indices = list(range(obs_dim))
 
-    idx_tensor = torch.tensor(indices)
+    idx_tensor = torch.tensor(indices, device=perturbed.device)
     num_candidates = idx_tensor.size(0)
     num_features = torch.randint(1, num_candidates + 1, (1,)).item()
 
-    perm = torch.randperm(num_candidates)
+    perm = torch.randperm(num_candidates, device=perturbed.device)
     chosen = idx_tensor[perm[:num_features]]
-    perturbed[chosen] = 0.0
+    perturbed[..., chosen] = 0.0
 
     return perturbed
 
@@ -457,11 +457,11 @@ def zero_out_modality(model, input_vals, modality):
     perturbed = input_vals.clone()
     if modality == "velocity":
         # indices 13 through 18 are velocity vectors
-        perturbed[13:19] = 0.0
+        perturbed[..., 13:19] = 0.0
     elif modality == "angular":
         # indices 0 through 12 and 19+ are angular components
-        perturbed[0:13] = 0.0
-        perturbed[19:] = 0.0
+        perturbed[..., 0:13] = 0.0
+        perturbed[..., 19:] = 0.0
     return perturbed
 
 
