@@ -1,5 +1,6 @@
 from itertools import count
 import json
+from pathlib import Path
 import hydra
 import wandb
 import gym
@@ -80,6 +81,11 @@ def main(cfg: DictConfig):
     save_path = adv_cfg.SAVE_PATH
     attack_choice = adv_cfg.ATTACK_CHOICE
     fgsm_eps = adv_cfg.FGSM_MAGNITUDE
+    collection_attacks = parse_collection_attacks(
+        getattr(adv_cfg, "COLLECTION_ATTACKS", None),
+        default_attack_choice=attack_choice,
+        default_fgsm_eps=fgsm_eps,
+    )
 
     if(max_steps_override):
         cfg.max_step = max_steps_override
@@ -167,15 +173,28 @@ def main(cfg: DictConfig):
             memory.add_to_buffer(trajectory)
 
     if(generate_dataset == True):
-        benign_dataset = []
-        adv_dataset = []
+        collection_datasets = {
+            spec["key"]: {
+                "spec": spec,
+                "benign": [],
+                "adversarial": [],
+            }
+            for spec in collection_attacks
+        }
 
     for iter_t in count():
         if iter_t % cfg.eval_freq == 0:
 
             #For Dataset Collection
-            dataset_buffer = [] #holds onto observations until we know they are worth keeping
-            dataset_adv_buffer = [] #holds onto adversarial observations in parrallel with dataset_buffer
+            collection_buffers = {}
+            if generate_dataset == True:
+                collection_buffers = {
+                    spec["key"]: {
+                        "benign": [],
+                        "adversarial": [],
+                    }
+                    for spec in collection_attacks
+                }
 
             num_envs = cfg.eval_num_envs
             max_step = eval_env.max_episode_length
@@ -195,29 +214,25 @@ def main(cfg: DictConfig):
                 ######## Adversarial injection ##########
 
                 if(generate_dataset == True):
-                    #hold on to the benign observation for the dataset
-                    buffer_obs = obs.clone()#.detach().cpu().numpy()
-                    buffer_list = [row.detach().cpu().numpy() for row in buffer_obs]
-                    dataset_buffer.extend(buffer_list)
-                
-                #we don't apply the adversarial perturbation when collecting data, as not to disrupt the agent
-                if(generate_dataset == True):
-                    #Seperate standard observation from the perturbed one for data collection
-                    adv_obs = adversary(agent, obs, target_modality=target_modality,
-                                        attack_choice=attack_choice, fgsm_eps=fgsm_eps)
+                    # Store benign observations paired with adversarial variants without
+                    # advancing the policy or environment on perturbed observations.
+                    benign_rows = [row.detach().cpu().numpy() for row in obs.clone()]
+                    for spec in collection_attacks:
+                        adv_obs = adversary(
+                            agent,
+                            obs.clone().detach(),
+                            target_modality=target_modality,
+                            attack_choice=spec["attack_choice"],
+                            fgsm_eps=spec["fgsm_magnitude"],
+                        )
+                        adv_rows = [row.detach().cpu().numpy() for row in adv_obs]
+                        collection_buffers[spec["key"]]["benign"].extend(benign_rows)
+                        collection_buffers[spec["key"]]["adversarial"].extend(adv_rows)
                     
                 elif(enable_attack == True):
                     #We can skip this line if attack is disabled otherwise
                     obs = adversary(agent, obs, target_modality=target_modality,
                                     attack_choice=attack_choice, fgsm_eps=fgsm_eps)
-
-                #Repeat data collection steps on adversarial data
-                if(generate_dataset == True):
-                    #Hold onto the perturbed sample as well
-                    #dataset_adv_buffer.append(obs.clone().detach().cpu().numpy())
-                    buffer_obs = adv_obs.clone()#.detach().cpu().numpy()
-                    buffer_list = [row.detach().cpu().numpy() for row in buffer_obs]
-                    dataset_adv_buffer.extend(buffer_list)
                 
                 if defence_func is not None:
                     ######## Defence purification ##########
@@ -253,9 +268,9 @@ def main(cfg: DictConfig):
                 #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
                 if(global_steps > 1.5e6):  #if(ret_mean > 0):
                     print("Sucessfull episode, saving data!")
-                    #extend dataset to include new values, rather than nesting lists
-                    benign_dataset.extend(dataset_buffer)
-                    adv_dataset.extend(dataset_adv_buffer)
+                    for key, buffers in collection_buffers.items():
+                        collection_datasets[key]["benign"].extend(buffers["benign"])
+                        collection_datasets[key]["adversarial"].extend(buffers["adversarial"])
 
             step_mean = step_tracker.mean()
             if ret_mean >= ret_max:
@@ -327,28 +342,123 @@ def main(cfg: DictConfig):
     if(generate_dataset == True):
         print('##############')
         print('Saving Dataset! ')
-        benign_dataset_df = pd.DataFrame(benign_dataset)
-        benign_dataset_df.to_csv(save_path+data_prefix+'_benign_obs_data.csv')
-        adv_dataset_df = pd.DataFrame(adv_dataset)
-        adv_dataset_df.to_csv(save_path+data_prefix+'_adversarial_obs_data.csv')
-        dataset_metadata = {
+        dataset_dir = Path(save_path) / f"{data_prefix}_dataset"
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        combined_dataset_parts = {}
+        combined_metadata = {
             "data_prefix": data_prefix,
-            "attack_choice": attack_choice,
             "target_modality": target_modality,
-            "fgsm_magnitude": fgsm_eps,
             "defense_method": defence_method,
             "train_on_defense": train_on_defense,
             "defense_mode": defense_mode,
             "enable_defense_train": enable_defense_train,
             "enable_defense_eval": enable_defense_eval,
-            "num_benign_rows": len(benign_dataset),
-            "num_adversarial_rows": len(adv_dataset),
-            "save_path": save_path,
+            "save_path": str(dataset_dir),
+            "collection_rollout_input": "benign",
+            "attacks": [],
         }
-        with open(save_path+data_prefix+'_metadata.json', 'w', encoding='utf-8') as metadata_file:
-            json.dump(dataset_metadata, metadata_file, indent=2)
+        for key, dataset in collection_datasets.items():
+            spec = dataset["spec"]
+            output_prefix = build_collection_prefix(data_prefix, spec, len(collection_attacks) > 1)
+            benign_dataset = dataset["benign"]
+            adv_dataset = dataset["adversarial"]
+            benign_dataset_df = pd.DataFrame(benign_dataset)
+            benign_dataset_df.to_csv(dataset_dir / f"{output_prefix}_benign_obs_data.csv")
+            adv_dataset_df = pd.DataFrame(adv_dataset)
+            adv_dataset_df.to_csv(dataset_dir / f"{output_prefix}_adversarial_obs_data.csv")
+            dataset_metadata = {
+                "data_prefix": output_prefix,
+                "attack_choice": spec["attack_choice"],
+                "target_modality": target_modality,
+                "fgsm_magnitude": spec["fgsm_magnitude"],
+                "defense_method": defence_method,
+                "train_on_defense": train_on_defense,
+                "defense_mode": defense_mode,
+                "enable_defense_train": enable_defense_train,
+                "enable_defense_eval": enable_defense_eval,
+                "num_benign_rows": len(benign_dataset),
+                "num_adversarial_rows": len(adv_dataset),
+                "save_path": str(dataset_dir),
+                "collection_rollout_input": "benign",
+            }
+            with open(dataset_dir / f"{output_prefix}_metadata.json", 'w', encoding='utf-8') as metadata_file:
+                json.dump(dataset_metadata, metadata_file, indent=2)
+
+            combined_metadata["attacks"].append(dataset_metadata)
+            if "sample_index" not in combined_dataset_parts:
+                row_count = len(benign_dataset_df)
+                combined_dataset_parts["sample_index"] = pd.Series(range(row_count))
+                combined_dataset_parts["target_modality"] = pd.Series([target_modality] * row_count)
+                combined_dataset_parts["defense_method"] = pd.Series([defence_method] * row_count)
+                combined_dataset_parts["collection_rollout_input"] = pd.Series(["benign"] * row_count)
+                combined_dataset_parts.update(prefixed_feature_columns(benign_dataset_df, "benign"))
+            combined_dataset_parts[f"{key}_attack_choice"] = pd.Series([spec["attack_choice"]] * len(adv_dataset_df))
+            combined_dataset_parts[f"{key}_fgsm_magnitude"] = pd.Series([spec["fgsm_magnitude"]] * len(adv_dataset_df))
+            combined_dataset_parts.update(prefixed_feature_columns(adv_dataset_df, f"adversarial_{key}"))
+
+        combined_dataset_df = pd.DataFrame(combined_dataset_parts)
+        combined_dataset_df.to_csv(dataset_dir / f"{data_prefix}_combined_obs_data.csv", index=False)
+        with open(dataset_dir / f"{data_prefix}_combined_metadata.json", 'w', encoding='utf-8') as metadata_file:
+            json.dump(combined_metadata, metadata_file, indent=2)
         print('Dataset Saved!')
         print('###############')
+
+
+def prefixed_feature_columns(dataframe, prefix):
+    return {
+        f"{prefix}_{column}": dataframe[column].reset_index(drop=True)
+        for column in dataframe.columns
+    }
+
+
+def format_float_slug(value):
+    text = f"{float(value):.6f}".rstrip("0").rstrip(".")
+    if text.startswith("0."):
+        return text[2:]
+    return text.replace(".", "")
+
+
+def parse_collection_attacks(raw_specs, default_attack_choice='FGSM', default_fgsm_eps=0.015):
+    if raw_specs is None or str(raw_specs).strip() == "":
+        raw_specs = f"{default_attack_choice}:{default_fgsm_eps}"
+
+    specs = []
+    for raw_spec in str(raw_specs).split(","):
+        raw_spec = raw_spec.strip()
+        if not raw_spec:
+            continue
+
+        parts = [part.strip() for part in raw_spec.split(":")]
+        attack = parts[0]
+        if len(parts) > 2:
+            raise ValueError(
+                f"Invalid collection attack spec {raw_spec!r}. Use ATTACK or ATTACK:FGSM_EPS."
+            )
+
+        eps = default_fgsm_eps
+        if len(parts) == 2 and parts[1] != "":
+            eps = float(parts[1])
+
+        key = attack.lower()
+        if attack.upper() == "FGSM":
+            key = f"{key}{format_float_slug(eps)}"
+
+        specs.append({
+            "key": key,
+            "attack_choice": attack,
+            "fgsm_magnitude": eps,
+        })
+
+    if not specs:
+        raise ValueError("At least one collection attack must be configured.")
+
+    return specs
+
+
+def build_collection_prefix(base_prefix, spec, include_attack_suffix):
+    if not include_attack_suffix:
+        return base_prefix
+    return f"{base_prefix}_{spec['key']}"
 
 def adversary(actor, obs, target_modality=None, attack_choice='FGSM', fgsm_eps=0.015):
 

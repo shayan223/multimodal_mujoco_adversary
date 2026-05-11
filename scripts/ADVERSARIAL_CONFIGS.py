@@ -13,6 +13,9 @@ _DEFAULT_ADV: Dict[str, Any] = {
     # Dataset collection mode
     "GENERATE_DATASET": False,
     "DATA_PREFIX": "fgsm015",
+    # Optional comma-separated collection specs, e.g. "FGSM:0.007,FGSM:0.015".
+    # When unset, collection uses ATTACK_CHOICE and FGSM_MAGNITUDE.
+    "COLLECTION_ATTACKS": None,
     # 'VAE', 'VAE_3d', 'Gaussian', 'DDPM', or None
     "DEF_METHOD": "DDPM",
     "TRAIN_ON_DEF": False,
@@ -38,7 +41,7 @@ _DEFAULT_ADV: Dict[str, Any] = {
 # FGSM / ZeroOut / RandomZeroOut sweep both + targeted modalities.
 # ModalityZeroOut only sweeps targeted modalities because "both" is not a valid mode there.
 # Names look like: m007_FGSM_velocity_none, m015_ModalityZeroOut_angular_DDPM
-FGSM_MAGNITUDE_GRID: Tuple[float, ...] = (0.015, )# 0.007)
+FGSM_MAGNITUDE_GRID: Tuple[float, ...] = (0.007, )# (0.015, 0.007)
 ATTACK_CHOICE_GRID: Tuple[str, ...] = (
     "FGSM",
     "ZeroOut",
