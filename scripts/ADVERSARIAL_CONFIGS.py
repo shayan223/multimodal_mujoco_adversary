@@ -16,6 +16,11 @@ _DEFAULT_ADV: Dict[str, Any] = {
     # Optional comma-separated collection specs, e.g. "FGSM:0.007,FGSM:0.015".
     # When unset, collection uses ATTACK_CHOICE and FGSM_MAGNITUDE.
     "COLLECTION_ATTACKS": None,
+    # Dataset save policy:
+    # episode_mean_gate = keep only eval buffers whose mean return clears the threshold
+    # save_all_with_quality = keep every eval buffer and annotate quality in sidecar CSVs
+    "COLLECTION_SAVE_MODE": "episode_mean_gate",
+    "COLLECTION_MEAN_RETURN_THRESHOLD": 0.0,
     # 'VAE', 'VAE_3d', 'Gaussian', 'DDPM', or None
     "DEF_METHOD": "DDPM",
     "TRAIN_ON_DEF": False,
@@ -235,5 +240,7 @@ def build_adv_wandb_metadata(adv_cfg: adversarial_cfg, seed: Any) -> Dict[str, A
         "enable_defense_eval": bool(adv_cfg.ENABLE_DEFENSE_EVAL),
         "ddpm_renoise_strength": float(adv_cfg.DDPM_RENOISE_STRENGTH),
         "ddpm_inference_steps": int(adv_cfg.DDPM_INFERENCE_STEPS),
+        "collection_save_mode": str(adv_cfg.COLLECTION_SAVE_MODE),
+        "collection_mean_return_threshold": float(adv_cfg.COLLECTION_MEAN_RETURN_THRESHOLD),
         "run_name_base": run_name_base,
     }

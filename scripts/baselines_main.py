@@ -81,6 +81,14 @@ def main(cfg: DictConfig):
     save_path = adv_cfg.SAVE_PATH
     attack_choice = adv_cfg.ATTACK_CHOICE
     fgsm_eps = adv_cfg.FGSM_MAGNITUDE
+    collection_save_mode = getattr(adv_cfg, "COLLECTION_SAVE_MODE", "episode_mean_gate")
+    collection_mean_threshold = float(getattr(adv_cfg, "COLLECTION_MEAN_RETURN_THRESHOLD", 0.0))
+    valid_collection_save_modes = {"episode_mean_gate", "save_all_with_quality"}
+    if collection_save_mode not in valid_collection_save_modes:
+        raise ValueError(
+            f"Unknown COLLECTION_SAVE_MODE {collection_save_mode!r}. "
+            f"Valid options: {sorted(valid_collection_save_modes)}."
+        )
     collection_attacks = parse_collection_attacks(
         getattr(adv_cfg, "COLLECTION_ATTACKS", None),
         default_attack_choice=attack_choice,
@@ -178,6 +186,10 @@ def main(cfg: DictConfig):
                 "spec": spec,
                 "benign": [],
                 "adversarial": [],
+                "quality": [],
+                "accepted_eval_buffers": 0,
+                "rejected_eval_buffers": 0,
+                "eval_returns": [],
             }
             for spec in collection_attacks
         }
@@ -207,7 +219,7 @@ def main(cfg: DictConfig):
             traj_states = []
             obs = eval_env.reset()
             defence_func = None
-            if(defence_method is not None) and enable_defense_eval:
+            if (not generate_dataset) and (defence_method is not None) and enable_defense_eval:
                 defence_func = defender(defence=defence_method, defence_model=def_model)
             for i_step in range(max_step):  # run an episode
 
@@ -265,12 +277,24 @@ def main(cfg: DictConfig):
                         #extend dataset to include new values, rather than nesting lists
                         benign_dataset.extend(dataset_buffer)
                         adv_dataset.extend(dataset_adv_buffer)'''
-                #If the episode reward is positive, the recorded observations are meaningfull enough for the dataset
-                if(global_steps > 1.5e6):  #if(ret_mean > 0):
-                    print("Sucessfull episode, saving data!")
-                    for key, buffers in collection_buffers.items():
-                        collection_datasets[key]["benign"].extend(buffers["benign"])
-                        collection_datasets[key]["adversarial"].extend(buffers["adversarial"])
+                save_collection_buffer = False
+                if global_steps > 1.5e6:
+                    if collection_save_mode == "episode_mean_gate":
+                        save_collection_buffer = ret_mean > collection_mean_threshold
+                    else:
+                        save_collection_buffer = True
+
+                for key, buffers in collection_buffers.items():
+                    dataset = collection_datasets[key]
+                    dataset["eval_returns"].append(float(ret_mean))
+                    if save_collection_buffer:
+                        print("Accepted collection buffer, saving data!")
+                        dataset["benign"].extend(buffers["benign"])
+                        dataset["adversarial"].extend(buffers["adversarial"])
+                        dataset["quality"].extend([float(ret_mean)] * len(buffers["benign"]))
+                        dataset["accepted_eval_buffers"] += 1
+                    else:
+                        dataset["rejected_eval_buffers"] += 1
 
             step_mean = step_tracker.mean()
             if ret_mean >= ret_max:
@@ -353,6 +377,9 @@ def main(cfg: DictConfig):
             "defense_mode": defense_mode,
             "enable_defense_train": enable_defense_train,
             "enable_defense_eval": enable_defense_eval,
+            "collection_eval_defense_applied": False,
+            "collection_save_mode": collection_save_mode,
+            "collection_mean_return_threshold": collection_mean_threshold,
             "save_path": str(dataset_dir),
             "collection_rollout_input": "benign",
             "attacks": [],
@@ -362,10 +389,17 @@ def main(cfg: DictConfig):
             output_prefix = build_collection_prefix(data_prefix, spec, len(collection_attacks) > 1)
             benign_dataset = dataset["benign"]
             adv_dataset = dataset["adversarial"]
+            quality_rows = dataset["quality"]
             benign_dataset_df = pd.DataFrame(benign_dataset)
             benign_dataset_df.to_csv(dataset_dir / f"{output_prefix}_benign_obs_data.csv")
             adv_dataset_df = pd.DataFrame(adv_dataset)
             adv_dataset_df.to_csv(dataset_dir / f"{output_prefix}_adversarial_obs_data.csv")
+            benign_quality_df = benign_dataset_df.copy()
+            benign_quality_df["collection_quality_ret_mean"] = pd.Series(quality_rows, dtype=np.float32)
+            benign_quality_df.to_csv(dataset_dir / f"{output_prefix}_benign_obs_quality_data.csv")
+            adv_quality_df = adv_dataset_df.copy()
+            adv_quality_df["collection_quality_ret_mean"] = pd.Series(quality_rows, dtype=np.float32)
+            adv_quality_df.to_csv(dataset_dir / f"{output_prefix}_adversarial_obs_quality_data.csv")
             dataset_metadata = {
                 "data_prefix": output_prefix,
                 "attack_choice": spec["attack_choice"],
@@ -376,8 +410,15 @@ def main(cfg: DictConfig):
                 "defense_mode": defense_mode,
                 "enable_defense_train": enable_defense_train,
                 "enable_defense_eval": enable_defense_eval,
+                "collection_eval_defense_applied": False,
+                "collection_save_mode": collection_save_mode,
+                "collection_mean_return_threshold": collection_mean_threshold,
                 "num_benign_rows": len(benign_dataset),
                 "num_adversarial_rows": len(adv_dataset),
+                "num_quality_rows": len(quality_rows),
+                "accepted_eval_buffers": dataset["accepted_eval_buffers"],
+                "rejected_eval_buffers": dataset["rejected_eval_buffers"],
+                "eval_mean_returns": dataset["eval_returns"],
                 "save_path": str(dataset_dir),
                 "collection_rollout_input": "benign",
             }
@@ -395,6 +436,7 @@ def main(cfg: DictConfig):
             combined_dataset_parts[f"{key}_attack_choice"] = pd.Series([spec["attack_choice"]] * len(adv_dataset_df))
             combined_dataset_parts[f"{key}_fgsm_magnitude"] = pd.Series([spec["fgsm_magnitude"]] * len(adv_dataset_df))
             combined_dataset_parts.update(prefixed_feature_columns(adv_dataset_df, f"adversarial_{key}"))
+            combined_dataset_parts[f"{key}_collection_quality_ret_mean"] = pd.Series(quality_rows, dtype=np.float32)
 
         combined_dataset_df = pd.DataFrame(combined_dataset_parts)
         combined_dataset_df.to_csv(dataset_dir / f"{data_prefix}_combined_obs_data.csv", index=False)
@@ -487,27 +529,21 @@ def adversary(actor, obs, target_modality=None, attack_choice='FGSM', fgsm_eps=0
 
 
 def fgsm_attack(model, input_vals, eps=0.015, target_modality=None,outputs=None) :
-    
-    input_vals.requires_grad = True
-            
-    if(outputs is None):
-        outputs = model.actor(input_vals)
-    
-    model.actor.zero_grad()
-    actor_loss = model.update_actor(input_vals,skip_weight_update=True)
+    attack_inputs = input_vals.detach().clone().requires_grad_(True)
+    input_grad = model.get_attack_input_gradient(attack_inputs)
 
     #modify just one modality (13 through 18 are velocity vectors)
     if(target_modality == 'velocity'):
-        targeted_features = input_vals.clone()
-        targeted_features[..., 13:19] += eps*input_vals.grad[..., 13:19].sign()
+        targeted_features = attack_inputs.detach().clone()
+        targeted_features[..., 13:19] += eps*input_grad[..., 13:19].sign()
         perturbed_out = targeted_features
     elif(target_modality == 'angular'):
-        targeted_features = input_vals.clone()
-        targeted_features[..., 0:13] += eps*input_vals.grad[..., 0:13].sign()
-        targeted_features[..., 19:] += eps*input_vals.grad[..., 19:].sign()
+        targeted_features = attack_inputs.detach().clone()
+        targeted_features[..., 0:13] += eps*input_grad[..., 0:13].sign()
+        targeted_features[..., 19:] += eps*input_grad[..., 19:].sign()
         perturbed_out = targeted_features
     else:
-        perturbed_out = input_vals + eps*input_vals.grad.sign()
+        perturbed_out = attack_inputs.detach() + eps*input_grad.sign()
 
     
     return perturbed_out#.detach()

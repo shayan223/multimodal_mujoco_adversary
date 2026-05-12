@@ -23,6 +23,18 @@ def main() -> int:
     parser.add_argument("--defense-mode", default="stochastic_light", help="Defense runtime mode.")
     parser.add_argument("--ddpm-experiment-name", default="diffusion_defense_1", help="DDPM experiment/checkpoint name.")
     parser.add_argument(
+        "--collection-save-mode",
+        choices=["episode_mean_gate", "save_all_with_quality"],
+        default=None,
+        help="Optional collection save policy override.",
+    )
+    parser.add_argument(
+        "--collection-mean-return-threshold",
+        type=float,
+        default=None,
+        help="Optional ret_mean threshold for episode_mean_gate mode.",
+    )
+    parser.add_argument(
         "--experiment-name",
         dest="dataset_prefix",
         default=None,
@@ -63,6 +75,10 @@ def main() -> int:
     env["ADV_DEFENSE_MODE"] = args.defense_mode
     env["ADV_DDPM_EXPERIMENT_NAME"] = args.ddpm_experiment_name
     env["ADV_DATA_PREFIX"] = dataset_prefix
+    if args.collection_save_mode is not None:
+        env["ADV_COLLECTION_SAVE_MODE"] = args.collection_save_mode
+    if args.collection_mean_return_threshold is not None:
+        env["ADV_COLLECTION_MEAN_RETURN_THRESHOLD"] = str(args.collection_mean_return_threshold)
     if args.save_path is not None:
         env["ADV_SAVE_PATH"] = args.save_path
     if args.max_step is not None:
