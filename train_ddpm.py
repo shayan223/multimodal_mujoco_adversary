@@ -4,6 +4,11 @@ import os
 from pathlib import Path
 import argparse
 
+REPO_ROOT = Path(__file__).resolve().parent
+DEFAULT_DATASET_DIR = REPO_ROOT / 'fgsm_collection_dataset'
+DEFAULT_BENIGN_CSV = DEFAULT_DATASET_DIR / 'fgsm_collection_fgsm015_benign_obs_data.csv'
+DEFAULT_ADVERSARIAL_CSV = DEFAULT_DATASET_DIR / 'fgsm_collection_fgsm015_adversarial_obs_data.csv'
+
 def main(args):
    
     experiment_name = args.experiment_name
@@ -22,7 +27,7 @@ def main(args):
     #Check experiment progress and load
     print('##############################')
     if os.path.exists(diff_model.checkpoint_path):
-        print("Previous checkpoint from experiment "+experiment_name+" found in: "+diff_model.checkpoint_path)
+        print("Previous checkpoint from experiment "+experiment_name+" found in: "+str(diff_model.checkpoint_path))
         print("Loading model!")
         diff_model.load_params()
         print("Loading complete!")
@@ -43,7 +48,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training and Testing for DDPM diffusion model')
     parser.add_argument('--pretrain_ddpm', action='store_true', default=True,
                         help='Performs DDPM pretraining')
-    parser.add_argument('--experiment_name', type=str, default='diffusion_defense_1',
+    parser.add_argument('--experiment_name', type=str, default='diffusion_defense_2', #diffusion_defense_1
                         help='Name of experiment to load/save to.')
     parser.add_argument('--sample',action='store_true', default=False,
                         help='Performs origin sampling on model')
@@ -56,10 +61,10 @@ if __name__ == '__main__':
                         help='Number of denoising steps to use at inference time.')
     parser.add_argument('--renoise_strength', type=float, default=1.0,
                         help='Strength of re-noising during stochastic inference.')
-    parser.add_argument('--benign_csv', type=str, default=None,
-                        help='Optional benign CSV override.')
-    parser.add_argument('--adversarial_csv', type=str, default=None,
-                        help='Optional adversarial CSV override.')
+    parser.add_argument('--benign_csv', type=str, default=str(DEFAULT_BENIGN_CSV),
+                        help='Benign CSV path.')
+    parser.add_argument('--adversarial_csv', type=str, default=str(DEFAULT_ADVERSARIAL_CSV),
+                        help='Adversarial CSV path.')
     args = parser.parse_args()
 
     main(args)
