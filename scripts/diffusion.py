@@ -200,7 +200,7 @@ class Diffusion_model():
         self.learning_rate = 1e-4
 
         # Number of training epochs
-        self.epochs = 40
+        self.epochs = 100
         self.train_ratio = 0.8
         self.val_ratio = 0.1
 
