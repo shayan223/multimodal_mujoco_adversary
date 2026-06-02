@@ -31,7 +31,7 @@ _DEFAULT_ADV: Dict[str, Any] = {
     "ENABLE_DEFENSE_TRAIN": True,
     "ENABLE_DEFENSE_EVAL": True,
     # DDPM-specific runtime controls
-    "DDPM_EXPERIMENT_NAME": "diffusion_defense_1",
+    "DDPM_EXPERIMENT_NAME": "diffusion_defense_2",
     "DDPM_RENOISE_STRENGTH": 1.0,
     "DDPM_INFERENCE_STEPS": 3,
     # None (both), 'velocity', or 'angular'
