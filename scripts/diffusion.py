@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 import json
 from pathlib import Path
+import time
 
 import torch
 import torch.utils.data
@@ -193,7 +194,7 @@ class Diffusion_model():
         # Number of time steps $T$
         self.n_steps = 3
         # Batch size
-        self.batch_size = 8
+        self.batch_size = 64
         # Number of samples to generate
         self.n_samples = 16
         # Learning rate
@@ -595,6 +596,43 @@ class Diffusion_model():
                 np.save(self.experiment_path / f'original_adversarial_{self.experiment_name}_epoch{epoch_num}.npy', adversarial_1d.cpu().numpy())
                 np.save(self.experiment_path / f'target_benign_{self.experiment_name}_epoch{epoch_num}.npy', benign_1d.cpu().numpy())
                 np.save(self.experiment_path / f'noisy_{self.experiment_name}_epoch{epoch_num}.npy', xT_1d.cpu().numpy())
+
+    def benchmark_inference_speed(self, batch_size: int = 1, warmup: int = 5, iterations: int = 50) -> Dict[str, float]:
+        batch_size = max(1, int(batch_size))
+        warmup = max(0, int(warmup))
+        iterations = max(1, int(iterations))
+
+        sample = torch.zeros((batch_size, self.sensor_dim), dtype=torch.float32, device=self.device)
+
+        def sync_device():
+            if self.device.type == "cuda":
+                torch.cuda.synchronize(self.device)
+
+        for _ in range(warmup):
+            _ = self.inference(sample)
+        sync_device()
+
+        start_time = time.perf_counter()
+        for _ in range(iterations):
+            _ = self.inference(sample)
+        sync_device()
+        elapsed_seconds = time.perf_counter() - start_time
+
+        total_samples = batch_size * iterations
+        seconds_per_batch = elapsed_seconds / iterations
+        seconds_per_sample = elapsed_seconds / total_samples
+        return {
+            "uses_origin_q_sample": self.use_stochastic_renoise,
+            "starting_t": self.n_steps - 1,
+            "inference_steps": max(1, int(self.inference_steps)),
+            "batch_size": batch_size,
+            "warmup_iterations": warmup,
+            "timed_iterations": iterations,
+            "elapsed_seconds": elapsed_seconds,
+            "ms_per_batch": seconds_per_batch * 1000.0,
+            "ms_per_sample": seconds_per_sample * 1000.0,
+            "samples_per_second": total_samples / elapsed_seconds if elapsed_seconds > 0 else float("inf"),
+        }
 
     def inference(self, input_vector, starting_t=None, return_numpy=False):
         """
