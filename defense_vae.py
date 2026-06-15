@@ -1,4 +1,5 @@
 
+import argparse
 import torch
 import pandas as pd
 import numpy as np
@@ -320,7 +321,12 @@ class VAE_simple(nn.Module):
         #print('KLD: ',KLD)
         return BCE + KLD, BCE, KLD
 
-def train_vae(EPOCHS=50):
+def train_vae(
+    EPOCHS=50,
+    benign_csv='multi_fgsm015_benign_obs_data.csv',
+    adversarial_csv='multi_fgsm015_adversarial_obs_data.csv',
+    output_path='./defence_vae.pth',
+):
     """
     Determine if any GPUs are available
     """
@@ -336,7 +342,7 @@ def train_vae(EPOCHS=50):
 
 
     # Split into train and validation
-    dataset = VAE_adv_obs_dataset('multi_fgsm015_adversarial_obs_data.csv','multi_fgsm015_benign_obs_data.csv')#,transforms=transforms.ToTensor())
+    dataset = VAE_adv_obs_dataset(benign_csv, adversarial_csv)#,transforms=transforms.ToTensor())
     val_fraction = 0.2
     val_size = int(len(dataset) * val_fraction)
     train_size = len(dataset) - val_size
@@ -423,8 +429,23 @@ def train_vae(EPOCHS=50):
     '''
 
     # Save model parameters
-    torch.save(net.state_dict(), './defence_vae.pth')
+    torch.save(net.state_dict(), output_path)
 
 
 if __name__ == '__main__':
-    train_vae()
+    parser = argparse.ArgumentParser(description='Train VAE defense on benign/adversarial observation CSVs.')
+    parser.add_argument('--benign-csv', default='multi_fgsm015_benign_obs_data.csv',
+                        help='CSV path for benign observations.')
+    parser.add_argument('--adversarial-csv', default='multi_fgsm015_adversarial_obs_data.csv',
+                        help='CSV path for adversarial observations.')
+    parser.add_argument('--epochs', type=int, default=50,
+                        help='Number of training epochs.')
+    parser.add_argument('--output', default='./defence_vae.pth',
+                        help='Path to save trained VAE weights.')
+    args = parser.parse_args()
+    train_vae(
+        EPOCHS=args.epochs,
+        benign_csv=args.benign_csv,
+        adversarial_csv=args.adversarial_csv,
+        output_path=args.output,
+    )

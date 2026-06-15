@@ -116,15 +116,40 @@ All adversarial test configurations — including environment name, defense meth
 This is the main location for toggling and customizing your experiment setup.
 
 #### 📦 Dataset Generation
-To generate a dataset of environment observations, set the following flag in `ADVERSARIAL_CONFIGS.py`:
+Use the collection script to run one benign rollout and save paired adversarial observations for FGSM at `0.007` and `0.015`:
 
-```python
-GENERATE_DATASET = True
+```bash
+./scripts/run_collect_fgsm_dataset.sh
 ```
 
-This will collect and store observations during the next run of the main script.
+You can pass normal Hydra overrides through the script:
 
-> ⚠️ **Important:** After dataset generation, be sure to set `GENERATE_DATASET = False` again before running any other tests to avoid overwriting the dataset or corrupting results.
+```bash
+./scripts/run_collect_fgsm_dataset.sh seed=123
+```
+
+By default this saves into:
+
+```text
+fgsm_collection_dataset/
+```
+
+The training-ready paired CSVs are:
+
+```text
+fgsm_collection_dataset/fgsm_collection_fgsm007_benign_obs_data.csv
+fgsm_collection_dataset/fgsm_collection_fgsm007_adversarial_obs_data.csv
+fgsm_collection_dataset/fgsm_collection_fgsm015_benign_obs_data.csv
+fgsm_collection_dataset/fgsm_collection_fgsm015_adversarial_obs_data.csv
+```
+
+The collection run also writes a combined inspection file:
+
+```text
+fgsm_collection_dataset/fgsm_collection_combined_obs_data.csv
+```
+
+The per-attack benign/adversarial CSVs keep the same numeric format used by the current VAE and DDPM dataset loaders. Use those paired files for training. The combined CSV is intended for analysis and bookkeeping.
 
 ---
 
@@ -132,36 +157,82 @@ This will collect and store observations during the next run of the main script.
 
 To use the **VAE** defense mechanism:
 
-1. **Generate Dataset**  
-   Set `GENERATE_DATASET = True` in `ADVERSARIAL_CONFIGS.py`, then run the main script to collect observations:
+1. **Generate the dataset**
+
+   ```bash
+   ./scripts/run_collect_fgsm_dataset.sh
+   ```
+
+2. **Train the VAE model**
+
+   For FGSM `0.015`:
+
+   ```bash
+   python defense_vae.py \
+     --benign-csv fgsm_collection_dataset/fgsm_collection_fgsm015_benign_obs_data.csv \
+     --adversarial-csv fgsm_collection_dataset/fgsm_collection_fgsm015_adversarial_obs_data.csv \
+     --output defence_vae.pth
+   ```
+
+   For FGSM `0.007`, swap in the `fgsm007` files:
+
+   ```bash
+   python defense_vae.py \
+     --benign-csv fgsm_collection_dataset/fgsm_collection_fgsm007_benign_obs_data.csv \
+     --adversarial-csv fgsm_collection_dataset/fgsm_collection_fgsm007_adversarial_obs_data.csv \
+     --output defence_vae.pth
+   ```
+
+3. **Run with VAE defense**
+
+   Set the selected defense method to `"VAE"` in `scripts/ADVERSARIAL_CONFIGS.py`:
+
+   ```python
+   "DEF_METHOD": "VAE",
+   ```
+
+   Then run the baseline experiment:
 
    ```bash
    python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
    ```
 
-2. **Train the VAE Model**  
-   Once the dataset is collected, train the VAE by running:
+### 🧪 Training DDPM Defense
 
-   ```bash
-   python scripts/defense_vae.py
-   ```
+After collecting data, train the DDPM purifier with the paired CSVs.
 
-3. **Run with VAE Defense**  
-   After VAE training completes:
-   - Set `GENERATE_DATASET = False` in `ADVERSARIAL_CONFIGS.py`
-   - Change the selected defense method to `"VAE"`:
+For FGSM `0.015`:
 
-     ```python
-     DEFENSE = "VAE"
-     ```
+```bash
+python train_ddpm.py \
+  --experiment_name diffusion_defense_fgsm015 \
+  --benign_csv fgsm_collection_dataset/fgsm_collection_fgsm015_benign_obs_data.csv \
+  --adversarial_csv fgsm_collection_dataset/fgsm_collection_fgsm015_adversarial_obs_data.csv
+```
 
-   - Re-run the experiment:
+For FGSM `0.007`:
 
-    ```bash
-    python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
-    ```
+```bash
+python train_ddpm.py \
+  --experiment_name diffusion_defense_fgsm007 \
+  --benign_csv fgsm_collection_dataset/fgsm_collection_fgsm007_benign_obs_data.csv \
+  --adversarial_csv fgsm_collection_dataset/fgsm_collection_fgsm007_adversarial_obs_data.csv
+```
 
-> ⚠️ **Reminder:** Always keep `GENERATE_DATASET = False` during evaluation or VAE-inference runs.
+To evaluate with a trained DDPM defense, set these fields in `scripts/ADVERSARIAL_CONFIGS.py`:
+
+```python
+"DEF_METHOD": "DDPM",
+"DDPM_EXPERIMENT_NAME": "diffusion_defense_fgsm015",
+```
+
+Then run:
+
+```bash
+python scripts/baselines_main.py algo=sac_algo env.name=antmaze-v1
+```
+
+> ⚠️ **Reminder:** Keep `"GENERATE_DATASET": False` during defense evaluation runs.
 
 ### Adversarial Detection
 

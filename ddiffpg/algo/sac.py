@@ -166,3 +166,20 @@ class AgentSAC(ActorCriticBase):
             alpha_loss = (self.get_alpha(detach=False) * (-log_prob - self.target_entropy).detach()).mean()
             self.optimizer_update(self.alpha_optim, alpha_loss)
         return actor_loss.item(), grad_norm
+
+    def get_attack_input_gradient(self, obs):
+        """Return d(actor objective)/d(obs) without mutating learner state."""
+        if not obs.requires_grad:
+            obs = obs.requires_grad_(True)
+
+        actions, _, log_prob = self.actor.get_actions_logprob(obs)
+        q_value = self.critic.get_q_min(obs, actions)
+        actor_loss = (self.get_alpha() * log_prob - q_value).mean()
+        (input_grad,) = torch.autograd.grad(
+            actor_loss,
+            obs,
+            retain_graph=False,
+            create_graph=False,
+            allow_unused=False,
+        )
+        return input_grad.detach()

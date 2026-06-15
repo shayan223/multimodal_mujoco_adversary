@@ -15,22 +15,40 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-def init_wandb(cfg):
+def init_wandb(cfg, run_name_base=None, config_updates=None):
     wandb_cfg = OmegaConf.to_container(cfg, resolve=True,
                                        throw_on_missing=True)
     wandb_cfg['hostname'] = platform.node()
-    wandb_kwargs = cfg.logging.wandb
+    if config_updates:
+        wandb_cfg.update(config_updates)
+    wandb_kwargs = OmegaConf.to_container(cfg.logging.wandb, resolve=True)
     wandb_tags = wandb_kwargs.get('tags', None)
     if wandb_tags is not None and isinstance(wandb_tags, str):
         wandb_kwargs['tags'] = [wandb_tags]
+    if run_name_base is not None:
+        wandb_kwargs['name'] = run_name_base
     if cfg.artifact is not None:
         wandb_id = cfg.artifact.split("/")[-1].split(":")[0]
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg, id=wandb_id, resume="must")
     else:
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg)
+    if run_name_base is not None:
+        final_run_name = f"{run_name_base}__{wandb_run.id}"
+        wandb_run.name = final_run_name
+        wandb.config.update({
+            "run_name_base": run_name_base,
+            "run_name": final_run_name,
+        }, allow_val_change=True)
+        wandb_run.summary["run_name_base"] = run_name_base
+        wandb_run.summary["run_name"] = final_run_name
     logger.warning(f'Wandb run dir:{wandb_run.dir}')
     logger.warning(f'Project name:{wandb_run.project_name()}')
     return wandb_run
+
+
+def update_wandb_summary(wandb_run, summary_updates):
+    for key, value in summary_updates.items():
+        wandb_run.summary[key] = value
 
 
 def preprocess_cfg(cfg, if_ddiffpg=True):
@@ -154,6 +172,120 @@ class Tracker:
 
     def max(self):
         return np.max(self.moving_average)
+
+
+class RewardCurveTracker:
+    """Tracks reward curve for AuC (area under curve) and drop-below-max count/rate."""
+
+    def __init__(self, min_reward_threshold=None, drop_threshold_pct=0.10):
+        self.min_reward_threshold = min_reward_threshold
+        self.drop_threshold_pct = float(drop_threshold_pct)
+        self._step_history = []
+        self._return_history = []
+        self._first_hit_threshold_step = None  # step at which we first hit min_reward_threshold
+        self._drop_below_max_pct_count = 0
+        # For summary statistics
+        self._sum_auc_full = 0.0
+        self._sum_auc_after_threshold = 0.0
+        self._post_threshold_eval_count = 0
+        self._post_threshold_failure_count = 0
+
+    def update(self, step, ret_mean, ret_max):
+        """
+        Update with an eval (step, mean return) and current max return.
+        Returns dict of metrics for wandb: AuC (full and after threshold), Failure Rate, drop count.
+        """
+        self._step_history.append(float(step))
+        self._return_history.append(float(ret_mean))
+
+        if self.min_reward_threshold is not None and self._first_hit_threshold_step is None and ret_mean >= self.min_reward_threshold:
+            self._first_hit_threshold_step = step
+
+        is_failure_this_eval = False
+        failure_condition = ret_max > 0 and ret_mean < (ret_max * self.drop_threshold_pct)
+
+        if failure_condition:
+            # If no min threshold is set, count failures from the very beginning.
+            if self.min_reward_threshold is None:
+                self._drop_below_max_pct_count += 1
+                is_failure_this_eval = True
+            else:
+                # Otherwise, only count failures after we've reached the min reward threshold.
+                if self._first_hit_threshold_step is not None and step >= self._first_hit_threshold_step:
+                    self._drop_below_max_pct_count += 1
+                    is_failure_this_eval = True
+
+        steps = np.array(self._step_history)
+        returns = np.array(self._return_history)
+        num_evals = len(self._step_history)
+        failure_rate = self._drop_below_max_pct_count / num_evals if num_evals > 0 else 0.0
+
+        auc_full = float(np.trapz(returns, steps)) if len(steps) >= 2 else 0.0
+        self._sum_auc_full += auc_full
+
+        out = {
+            "eval/AuC_full": auc_full,
+            "eval/Failure Rate": failure_rate,
+            "eval/drop_below_max_pct_count": self._drop_below_max_pct_count,
+        }
+
+        if self.min_reward_threshold is not None:
+            if self._first_hit_threshold_step is not None:
+                # AuC for the curve *after* we first reached the threshold (inclusive)
+                mask = steps >= self._first_hit_threshold_step
+                s = steps[mask]
+                r = returns[mask]
+                auc_after = float(np.trapz(r, s)) if len(s) >= 2 else 0.0
+                out["eval/AuC_after_min_threshold"] = auc_after
+                self._sum_auc_after_threshold += auc_after
+
+                # Track post-threshold failure rate (only considering evals after threshold)
+                if step >= self._first_hit_threshold_step:
+                    self._post_threshold_eval_count += 1
+                    if is_failure_this_eval:
+                        self._post_threshold_failure_count += 1
+            else:
+                out["eval/AuC_after_min_threshold"] = 0.0
+
+        return out
+
+    def summary_metrics(self):
+        """
+        Run-level summary metrics for easy tabular comparison across runs.
+
+        1. summary/max_reward_drops: max number of drops below percentage threshold
+        2. summary/avg_AuC_full: average AuC over all evals
+        3. summary/avg_AuC_after_min_threshold: average AuC after min threshold (if applicable)
+        4. summary/avg_failure_rate: average failure rate over all evals
+        5. summary/avg_failure_rate_after_min_threshold: average failure rate after min threshold (if applicable)
+        """
+        num_evals = len(self._step_history)
+        if num_evals == 0:
+            return {
+                "summary/max_reward_drops": 0,
+                "summary/avg_AuC_full": 0.0,
+                "summary/avg_AuC_after_min_threshold": 0.0,
+                "summary/avg_failure_rate": 0.0,
+                "summary/avg_failure_rate_after_min_threshold": 0.0,
+            }
+
+        avg_auc_full = self._sum_auc_full / num_evals
+        avg_failure_rate = self._drop_below_max_pct_count / num_evals
+
+        if self.min_reward_threshold is not None and self._post_threshold_eval_count > 0:
+            avg_auc_after = self._sum_auc_after_threshold / self._post_threshold_eval_count
+            avg_failure_rate_after = self._post_threshold_failure_count / self._post_threshold_eval_count
+        else:
+            avg_auc_after = 0.0
+            avg_failure_rate_after = 0.0
+
+        return {
+            "summary/max_reward_drops": self._drop_below_max_pct_count,
+            "summary/avg_AuC_full": avg_auc_full,
+            "summary/avg_AuC_after_min_threshold": avg_auc_after,
+            "summary/avg_failure_rate": avg_failure_rate,
+            "summary/avg_failure_rate_after_min_threshold": avg_failure_rate_after,
+        }
 
 
 def get_action_dim(action_space):

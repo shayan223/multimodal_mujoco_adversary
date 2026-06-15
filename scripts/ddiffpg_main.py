@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 import ddiffpg
 from ddiffpg.algo import alg_name_to_path
 from ddiffpg.utils.common import init_wandb
+from ddiffpg.utils.common import update_wandb_summary
 from ddiffpg.utils.common import load_class_from_path
 from ddiffpg.utils.common import set_random_seed
 from ddiffpg.utils.common import capture_keyboard_interrupt
@@ -17,7 +18,7 @@ from ddiffpg.utils.model_util import load_model
 from ddiffpg.utils.model_util import save_model
 from ddiffpg.wrappers.d4rl_wrapper import D4RLEnvWrapper
 from ddiffpg.wrappers.pybullet_wrapper import PybulletEnvWrapper
-from ddiffpg.utils.common import Tracker, preprocess_cfg
+from ddiffpg.utils.common import Tracker, RewardCurveTracker, preprocess_cfg
 from ddiffpg.utils.plot_util import plot_cluster, plot_traj, plot_hierarchy
 from ddiffpg.utils.torch_util import add_embedding
 
@@ -59,6 +60,11 @@ def main(cfg: DictConfig):
     global_steps = 0
     agent.reset_agent()
     ret_max = float('-inf')
+    rt_cfg = getattr(cfg, "reward_tracking", None) or {}
+    reward_curve_tracker = RewardCurveTracker(
+        min_reward_threshold=rt_cfg.get("min_reward_threshold"),
+        drop_threshold_pct=rt_cfg.get("drop_threshold_pct", 0.10),
+    )
 
     steps = agent.explore_env(env, cfg.algo.warm_up, random=True)
     agent.diffusion_buffer.update_cluster()
@@ -145,9 +151,12 @@ def main(cfg: DictConfig):
                        coverage=agent.pos_history.mat if 'antmaze' in cfg.env.name else None,
                        )
 
-            wandb.log({'eval/return': ret_mean,
-                        'eval/episode_length': step_mean,
-                       })
+            reward_metrics = reward_curve_tracker.update(global_steps, ret_mean, ret_max)
+            wandb.log({
+                'eval/return': ret_mean,
+                'eval/episode_length': step_mean,
+                **reward_metrics,
+            })
         
         steps = agent.explore_env(env, cfg.algo.horizon_len, random=False, total_steps=global_steps)
         global_steps += steps
@@ -159,6 +168,11 @@ def main(cfg: DictConfig):
 
         if global_steps > cfg.max_step:
             break
+
+
+    # Log run-level summary metrics for easy comparison across runs
+    summary_metrics = reward_curve_tracker.summary_metrics()
+    update_wandb_summary(wandb_run, summary_metrics)
 
 
 if __name__ == '__main__':
