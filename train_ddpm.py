@@ -71,7 +71,7 @@ def main(args):
     if(args.pretrain_ddpm):
         print("Running pre-training inference speed check...")
         print_inference_speed(diff_model, args)
-        diff_model.run()
+        diff_model.run(checkpoint_interval_batches=args.checkpoint_interval_batches)
     if(args.sample):
         diff_model.origin_sampling(999,starting_t=10,eval=True,subset_factor=1000, samples=1)
 
@@ -103,6 +103,8 @@ if __name__ == '__main__':
                         help='Warmup iterations for DDPM inference speed checks.')
     parser.add_argument('--speed_test_iterations', type=int, default=50,
                         help='Timed iterations for DDPM inference speed checks.')
+    parser.add_argument('--checkpoint_interval_batches', type=int, default=100,
+                        help='Save a resumable DDPM training checkpoint every N batches; set 0 to save only after each epoch.')
     parser.add_argument('--benign_csv', type=str, default=str(DEFAULT_BENIGN_CSV),
                         help='Benign CSV path.')
     parser.add_argument('--adversarial_csv', type=str, default=str(DEFAULT_ADVERSARIAL_CSV),

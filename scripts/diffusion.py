@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 import json
 from pathlib import Path
+import random
 import time
 
 import torch
@@ -33,6 +34,7 @@ class sensor_diffusion_dataset(Dataset):
         transform=None,
         dtype=torch.float32,
         normalization_stats: Optional[Dict[str, np.ndarray]] = None,
+        shuffle_seed: Optional[int] = 42,
     ):
         """
         Args:
@@ -76,8 +78,11 @@ class sensor_diffusion_dataset(Dataset):
         print("  - Benign samples (self-labeled): ", len(benign_inputs))
         print("  - Adversarial samples (labeled with benign counterpart): ", len(adversarial_inputs))
 
-        # Shuffle
-        indices = np.random.permutation(len(self.data))
+        # Shuffle deterministically so partial-epoch checkpoints can resume on the same batches.
+        if shuffle_seed is None:
+            indices = np.random.permutation(len(self.data))
+        else:
+            indices = np.random.default_rng(shuffle_seed).permutation(len(self.data))
         self.data = self.data[indices]
         self.targets = self.targets[indices]
         self.sample_types = self.sample_types[indices]
@@ -223,9 +228,12 @@ class Diffusion_model():
         self.training_data_loader = None
         self.validation_data_loader = None
         self.test_data_loader = None
+        self.training_subset = None
         self.adv_training_data_loader = None
         self.normalization_stats = None
         self.dataset_split_metadata: Dict[str, object] = {}
+        self.training_shuffle_seed = 12345
+        self.loaded_checkpoint_state: Optional[Dict[str, object]] = None
         self.inference_mode = inference_mode
         self.inference_steps = inference_steps if inference_steps is not None else self.n_steps
         self.renoise_strength = renoise_strength
@@ -332,9 +340,8 @@ class Diffusion_model():
         train_subset, val_subset, test_subset = torch.utils.data.random_split(
             dataset, [train_size, val_size, test_size], generator=generator
         )
-        self.training_data_loader = torch.utils.data.DataLoader(
-            train_subset, batch_size=self.batch_size, shuffle=True, num_workers=0, pin_memory=False
-        )
+        self.training_subset = train_subset
+        self.training_data_loader = self._training_loader_for_epoch(0)
         self.validation_data_loader = torch.utils.data.DataLoader(
             val_subset, batch_size=self.batch_size, shuffle=False, num_workers=0, pin_memory=False
         )
@@ -349,6 +356,21 @@ class Diffusion_model():
         }
         with open(self.split_metadata_path, 'w', encoding='utf-8') as split_file:
             json.dump(self.dataset_split_metadata, split_file, indent=2)
+
+    def _training_loader_for_epoch(self, epoch_num: int):
+        if self.training_subset is None:
+            return None
+
+        generator = torch.Generator()
+        generator.manual_seed(self.training_shuffle_seed + int(epoch_num))
+        return torch.utils.data.DataLoader(
+            self.training_subset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=0,
+            pin_memory=False,
+            generator=generator,
+        )
 
     def evaluate_loader(self, loader) -> Dict[str, float]:
         if loader is None:
@@ -432,15 +454,27 @@ class Diffusion_model():
             torchvision.utils.save_image(x, self.origin_sampling_path+self.experiment_name+'.png')
     
 
-    def train(self):
+    def train(
+        self,
+        epoch_num: int,
+        start_batch: int = 0,
+        batch_losses: Optional[List[float]] = None,
+        checkpoint_interval_batches: int = 0,
+        completed_epoch_losses: Optional[List[float]] = None,
+    ):
         """
         ### Train
         """
-        losses = []
+        losses = list(batch_losses or [])
+        completed_epoch_losses = list(completed_epoch_losses or [])
+        self.training_data_loader = self._training_loader_for_epoch(epoch_num)
 
         # Iterate through the dataset
         self.eps_model.train()
         for i, (adversarial_data, benign_data, _metadata) in enumerate(tqdm(self.training_data_loader)):
+            if i < start_batch:
+                continue
+
             # Move data to device
             adversarial_data = adversarial_data.to(self.device)#.permute(1,0,2)
             benign_data = benign_data.to(self.device)#.permute(1,0,2)
@@ -461,6 +495,20 @@ class Diffusion_model():
             self.optimizer.step()
             # Track the loss
             losses.append(loss.item())
+
+            next_batch_idx = i + 1
+            if checkpoint_interval_batches > 0 and next_batch_idx % checkpoint_interval_batches == 0:
+                print(
+                    f"Saving batch checkpoint to {self.checkpoint_path} "
+                    f"(epoch {epoch_num}, next batch {next_batch_idx})"
+                )
+                self.save_training_checkpoint(
+                    completed_epochs=epoch_num,
+                    current_epoch=epoch_num,
+                    next_batch_idx=next_batch_idx,
+                    losses=completed_epoch_losses,
+                    batch_losses=losses,
+                )
             #Test break
             if self.debug is True:
                 if(i == 0):
@@ -471,54 +519,72 @@ class Diffusion_model():
             
 
 
-    def run(self):
+    def run(self, checkpoint_interval_batches: int = 100):
+        checkpoint_interval_batches = max(0, int(checkpoint_interval_batches))
         
         self.experiment_path.mkdir(parents=True, exist_ok=True)
         self._save_normalization_stats()
         self._build_split_loaders()
 
-        prev_epoch_count = 0
-        losses = []
+        checkpoint_state = self.loaded_checkpoint_state or {}
         losses_path = self.loss_vals_path
+        losses = list(checkpoint_state.get("losses") or [])
 
-        if losses_path.exists():
+        if losses:
+            print("Loaded previous losses from checkpoint.")
+        elif losses_path.exists():
             print("Loading previous losses...")
             with open(losses_path, newline='') as file:
                 reader = csv.reader(file,quoting=csv.QUOTE_NONNUMERIC)
                 losses = list(reader)
                 #strip the nested list
                 losses = losses[0]
-            prev_epoch_count = len(losses)
             print(losses)
             print("Done!")
         else:
             print("No losses to load, fresh training...")
 
-        print("Beginning Training starting at epoch: ", prev_epoch_count)
+        completed_epochs = int(checkpoint_state.get("completed_epochs", len(losses)))
+        current_epoch = int(checkpoint_state.get("current_epoch", completed_epochs))
+        next_batch_idx = int(checkpoint_state.get("next_batch_idx", 0))
+        batch_losses = list(checkpoint_state.get("batch_losses") or [])
+        start_epoch = current_epoch if next_batch_idx > 0 else completed_epochs
+
+        if next_batch_idx > 0:
+            print(
+                "Resuming partially completed epoch "
+                f"{current_epoch} at batch {next_batch_idx}."
+            )
+
+        print("Beginning Training starting at epoch: ", start_epoch)
 
         #Training loop
-        for i in range(self.epochs):
-            print("Epoch ", prev_epoch_count + i, ":")
+        for epoch_num in range(start_epoch, start_epoch + self.epochs):
+            print("Epoch ", epoch_num, ":")
             # Train the model
-            epoch_loss = self.train()
+            epoch_start_batch = next_batch_idx if epoch_num == current_epoch else 0
+            epoch_batch_losses = batch_losses if epoch_num == current_epoch else []
+            epoch_loss = self.train(
+                epoch_num,
+                start_batch=epoch_start_batch,
+                batch_losses=epoch_batch_losses,
+                checkpoint_interval_batches=checkpoint_interval_batches,
+                completed_epoch_losses=losses,
+            )
             val_metrics = self.evaluate_loader(self.validation_data_loader)
             print('Loss: ',epoch_loss)
             print('Validation metrics: ', val_metrics)
             # Sample some images
             #if(i % 2 == 0):
             print("Saving Samples to: "+str(self.experiment_path))
-            self.origin_sampling(prev_epoch_count + i)
-            print("Done!")
-            # Save the model
-            print("Saving Checkpoint to "+str(self.checkpoint_path))
-            self.save_params()
+            self.origin_sampling(epoch_num)
             print("Done!")
             
             losses.append(epoch_loss)
 
             #Update loss plot at each epoch
             #print(list(range(prev_epoch_count + i + 1)))
-            plt.plot(list(range(prev_epoch_count + i + 1)), losses, label='Training Loss')
+            plt.plot(list(range(len(losses))), losses, label='Training Loss')
             
             plt.title('Training Loss')
             plt.xlabel('Epochs')
@@ -532,6 +598,20 @@ class Diffusion_model():
             with open(losses_path, 'w') as file:
                 wr = csv.writer(file,quoting=csv.QUOTE_NONNUMERIC)
                 wr.writerow(losses)
+
+            # Save the model after losses/plots are durable so an epoch checkpoint is complete.
+            print("Saving Checkpoint to "+str(self.checkpoint_path))
+            self.save_training_checkpoint(
+                completed_epochs=epoch_num + 1,
+                current_epoch=epoch_num + 1,
+                next_batch_idx=0,
+                losses=losses,
+                batch_losses=[],
+            )
+            print("Done!")
+
+            next_batch_idx = 0
+            batch_losses = []
 
     def origin_sampling(self,epoch_num,starting_t=None,eval=False,subset_factor=1,samples=16):
         if(starting_t is None):
@@ -902,19 +982,110 @@ class Diffusion_model():
     def save_params(self,adv=False):
         target_path = self.adv_checkpoint_path if adv else self.checkpoint_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        if(adv == True):
-            torch.save(self.eps_model.state_dict(),self.adv_checkpoint_path)
+        if adv == True:
+            torch.save(self.eps_model.state_dict(), self.adv_checkpoint_path)
         else:
-            torch.save(self.eps_model.state_dict(),self.checkpoint_path)
+            checkpoint_state = self.loaded_checkpoint_state or {}
+            self.save_training_checkpoint(
+                completed_epochs=int(checkpoint_state.get("completed_epochs", 0)),
+                current_epoch=int(checkpoint_state.get("current_epoch", checkpoint_state.get("completed_epochs", 0))),
+                next_batch_idx=int(checkpoint_state.get("next_batch_idx", 0)),
+                losses=list(checkpoint_state.get("losses") or []),
+                batch_losses=list(checkpoint_state.get("batch_losses") or []),
+            )
             self._save_normalization_stats()
 
 
     def load_params(self,adv=False):
         if not adv:
             self._load_normalization_stats()
-        if(adv == True):
-            self.eps_model.load_state_dict(torch.load(self.adv_checkpoint_path, map_location=self.device))
+        target_path = self.adv_checkpoint_path if adv else self.checkpoint_path
+        checkpoint = self._load_torch_checkpoint(target_path)
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            self.eps_model.load_state_dict(checkpoint["model_state_dict"])
+            if "optimizer_state_dict" in checkpoint:
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            if not adv and "training_shuffle_seed" in checkpoint:
+                self.training_shuffle_seed = int(checkpoint["training_shuffle_seed"])
+            if not adv and "normalization_stats" in checkpoint:
+                self.normalization_stats = {
+                    "mean": np.asarray(checkpoint["normalization_stats"]["mean"], dtype=np.float32),
+                    "std": np.asarray(checkpoint["normalization_stats"]["std"], dtype=np.float32),
+                }
+            if not adv:
+                self.loaded_checkpoint_state = {
+                    "completed_epochs": checkpoint.get("completed_epochs", 0),
+                    "current_epoch": checkpoint.get("current_epoch", checkpoint.get("completed_epochs", 0)),
+                    "next_batch_idx": checkpoint.get("next_batch_idx", 0),
+                    "losses": checkpoint.get("losses", []),
+                    "batch_losses": checkpoint.get("batch_losses", []),
+                }
+                self._restore_rng_state(checkpoint.get("rng_state"))
         else:
-            self.eps_model.load_state_dict(torch.load(self.checkpoint_path, map_location=self.device))
+            self.eps_model.load_state_dict(checkpoint)
+            if not adv:
+                self.loaded_checkpoint_state = {}
         self.eps_model.to(self.device)
         self.set_inference_config(self.inference_mode, self.inference_steps, self.renoise_strength)
+
+    def _load_torch_checkpoint(self, checkpoint_path: Path):
+        try:
+            return torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        except TypeError:
+            return torch.load(checkpoint_path, map_location=self.device)
+
+    def save_training_checkpoint(
+        self,
+        completed_epochs: int,
+        current_epoch: int,
+        next_batch_idx: int,
+        losses: List[float],
+        batch_losses: List[float],
+    ):
+        self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint = {
+            "format_version": 2,
+            "model_state_dict": self.eps_model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "completed_epochs": int(completed_epochs),
+            "current_epoch": int(current_epoch),
+            "next_batch_idx": int(next_batch_idx),
+            "losses": [float(loss) for loss in losses],
+            "batch_losses": [float(loss) for loss in batch_losses],
+            "normalization_stats": self._normalization_stats_to_json(),
+            "training_shuffle_seed": self.training_shuffle_seed,
+            "rng_state": self._capture_rng_state(),
+        }
+        temp_path = self.checkpoint_path.with_suffix(self.checkpoint_path.suffix + ".tmp")
+        torch.save(checkpoint, temp_path)
+        os.replace(temp_path, self.checkpoint_path)
+        self._save_normalization_stats()
+        self.loaded_checkpoint_state = {
+            "completed_epochs": int(completed_epochs),
+            "current_epoch": int(current_epoch),
+            "next_batch_idx": int(next_batch_idx),
+            "losses": [float(loss) for loss in losses],
+            "batch_losses": [float(loss) for loss in batch_losses],
+        }
+
+    def _capture_rng_state(self) -> Dict[str, object]:
+        rng_state = {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "torch": torch.get_rng_state(),
+        }
+        if torch.cuda.is_available():
+            rng_state["cuda"] = torch.cuda.get_rng_state_all()
+        return rng_state
+
+    def _restore_rng_state(self, rng_state: Optional[Dict[str, object]]):
+        if not rng_state:
+            return
+        if "python" in rng_state:
+            random.setstate(rng_state["python"])
+        if "numpy" in rng_state:
+            np.random.set_state(rng_state["numpy"])
+        if "torch" in rng_state:
+            torch.set_rng_state(rng_state["torch"].cpu())
+        if torch.cuda.is_available() and "cuda" in rng_state:
+            torch.cuda.set_rng_state_all(rng_state["cuda"])
