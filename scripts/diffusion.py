@@ -161,15 +161,32 @@ class Diffusion_model():
         self.debug = debug
         self.experiment_name = experiment_name
         self.repo_root = Path(__file__).resolve().parents[1]
+
+        # Non Colab Drive Path
+
         self.experiment_root = self.repo_root / 'Experiments'
+
+        #Colab Drive Path
+
+        content_folder = Path(__file__).resolve().parents[2]
+        self.experiment_root = content_folder / 'drive' / 'MyDrive' / 'MMMA.colab.expiriments'
+
         self.device = device
         self.experiment_path = self.experiment_root / experiment_name
         self.checkpoint_path = self.experiment_path / f'{experiment_name}_diffusion_checkpoint.zip'
+
+        #
+
         self.training_loss_plot_path = self.experiment_path / f'{experiment_name}_training_loss.png'
         self.loss_vals_path = self.experiment_path / f'{self.experiment_name}_latest_losses.csv'
         self.origin_sampling_path = self.experiment_path / 'origin_sampling'
         self.normalization_stats_path = self.experiment_path / f'{experiment_name}_normalization_stats.json'
         self.split_metadata_path = self.experiment_path / f'{experiment_name}_dataset_splits.json'
+
+        self.final_results_dir = self.experiment_path / 'final_results'
+        self.final_checkpoint_path = self.final_results_dir / f'{experiment_name}_diffusion_checkpoint.zip'
+        self.final_losses_path = self.final_results_dir / f'{self.experiment_name}_latest_losses.csv'
+        self.final_normalization_stats_path = self.final_results_dir / f'{experiment_name}_normalization_stats.json'
 
         self.adv_run_path = self.experiment_root / f'ADVERSARIAL_{experiment_name}'
         self.adv_checkpoint_path = self.adv_run_path / f'{experiment_name}_diffusion_checkpoint.zip'
@@ -197,9 +214,9 @@ class Diffusion_model():
         self.is_attention = [False, False, True]
 
         # Number of time steps $T$
-        self.n_steps = 3
+        self.n_steps = 2
         # Batch size
-        self.batch_size = 64
+        self.batch_size = 8192
         # Number of samples to generate
         self.n_samples = 16
         # Learning rate
@@ -294,9 +311,10 @@ class Diffusion_model():
             "std": self.normalization_stats["std"].tolist(),
         }
 
-    def _save_normalization_stats(self):
-        self.experiment_path.mkdir(parents=True, exist_ok=True)
-        with open(self.normalization_stats_path, 'w', encoding='utf-8') as stats_file:
+    def _save_normalization_stats(self, stats_path: Optional[Path] = None):
+        target_path = stats_path or self.normalization_stats_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, 'w', encoding='utf-8') as stats_file:
             json.dump(self._normalization_stats_to_json(), stats_file, indent=2)
 
     def _load_normalization_stats(self):
@@ -612,6 +630,8 @@ class Diffusion_model():
 
             next_batch_idx = 0
             batch_losses = []
+        
+        # after final 
 
     def origin_sampling(self,epoch_num,starting_t=None,eval=False,subset_factor=1,samples=16):
         if(starting_t is None):
@@ -1033,6 +1053,44 @@ class Diffusion_model():
             return torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         except TypeError:
             return torch.load(checkpoint_path, map_location=self.device)
+
+    def save_final_losses(
+        self,
+        completed_epochs: int,
+        current_epoch: int,
+        next_batch_idx: int,
+        losses: List[float],
+        batch_losses: List[float],
+    ):
+        self.final_results_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint = {
+            "format_version": 2,
+            # "model_state_dict": self.eps_model.state_dict(),
+            # "optimizer_state_dict": self.optimizer.state_dict(),
+            "completed_epochs": int(completed_epochs),
+            # "current_epoch": int(current_epoch),
+            # "next_batch_idx": int(next_batch_idx),
+            "losses": [float(loss) for loss in losses],
+            "batch_losses": [float(loss) for loss in batch_losses],
+            # "normalization_stats": self._normalization_stats_to_json(),
+            # "training_shuffle_seed": self.training_shuffle_seed,
+            # "rng_state": self._capture_rng_state(),
+        }
+        temp_path = self.final_checkpoint_path.with_suffix(self.final_checkpoint_path.suffix + ".tmp")
+        torch.save(checkpoint, temp_path)
+        os.replace(temp_path, self.final_checkpoint_path)
+        self._save_normalization_stats(self.final_normalization_stats_path)
+        self.final_losses_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.final_losses_path, 'w', newline='') as file:
+            writer = csv.writer(file, quoting=csv.QUOTE_NONNUMERIC)
+            writer.writerow([float(loss) for loss in losses])
+        self.loaded_checkpoint_state = {
+            "completed_epochs": int(completed_epochs),
+            "current_epoch": int(current_epoch),
+            "next_batch_idx": int(next_batch_idx),
+            "losses": [float(loss) for loss in losses],
+            "batch_losses": [float(loss) for loss in batch_losses],
+        }
 
     def save_training_checkpoint(
         self,
