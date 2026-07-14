@@ -588,8 +588,9 @@ class Diffusion_model():
         plt.figure(figsize=(8, 5))
         plt.plot(df.iloc[0], marker="o", color="purple", linestyle="-")
         
-        plot_path = os.path.join(parent_folder_path, "Epoch Plot")
+        plot_path = os.path.join(parent_folder_path, "Epoch_Plot.png")
         plt.savefig(plot_path)
+        plt.close()
 
         # the other paramters...
 
