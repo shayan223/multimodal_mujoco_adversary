@@ -228,7 +228,7 @@ class Diffusion_model():
         self.learning_rate = 1e-4
 
         # Number of training epochs
-        self.epochs = 100
+        self.epochs = 50
         self.train_ratio = 0.8
         self.val_ratio = 0.1
 
@@ -760,7 +760,6 @@ class Diffusion_model():
         batch_size = max(1, int(batch_size))
         warmup = max(0, int(warmup))
         iterations = max(1, int(iterations))
-
         sample = torch.zeros((batch_size, self.sensor_dim), dtype=torch.float32, device=self.device)
 
         def sync_device():
@@ -1109,7 +1108,7 @@ class Diffusion_model():
 
     def _load_torch_checkpoint(self, checkpoint_path: Path):
         try:
-            return torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+            return torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         except TypeError:
             return torch.load(checkpoint_path, map_location=self.device)
 
@@ -1167,4 +1166,10 @@ class Diffusion_model():
         if "torch" in rng_state:
             torch.set_rng_state(rng_state["torch"].cpu())
         if torch.cuda.is_available() and "cuda" in rng_state:
-            torch.cuda.set_rng_state_all(rng_state["cuda"])
+            cuda_states = rng_state["cuda"]
+            if isinstance(cuda_states, (list, tuple)):
+                cuda_states = [
+                    state.cpu() if isinstance(state, torch.Tensor) and state.device.type == "cuda" else state
+                    for state in cuda_states
+                ]
+            torch.cuda.set_rng_state_all(cuda_states)
