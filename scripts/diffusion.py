@@ -4,6 +4,9 @@ from pathlib import Path
 import random
 import time
 
+import yaml
+import shutil
+
 import torch
 import torch.utils.data
 import torch.nn.functional as F
@@ -166,10 +169,12 @@ class Diffusion_model():
 
         self.experiment_root = self.repo_root / 'Experiments'
 
+        self.final_results_root = self.repo_root / 'final_results'
+
         #Colab Drive Path
 
-        content_folder = Path(__file__).resolve().parents[2]
-        self.experiment_root = content_folder / 'drive' / 'MyDrive' / 'MMMA.colab.expiriments'
+        # content_folder = Path(__file__).resolve().parents[2]
+        # self.experiment_root = content_folder / 'drive' / 'MyDrive' / 'MMMA.colab.expiriments'
 
         self.device = device
         self.experiment_path = self.experiment_root / experiment_name
@@ -535,6 +540,59 @@ class Diffusion_model():
         #return avg loss for epoch
         return sum(losses) / len(losses)
             
+    def save_final_results(self):
+        
+        # here there will be a parent folder to 
+        parent_folder_path = self.final_results_root
+        child = str(self.experiment_name + '_final_results')
+        final_path = os.path.join(parent_folder_path, child)
+
+        index = 0
+        while os.path.exists(final_path):
+            if index == 0:
+                index +=1
+                continue
+            newchild = f'{child}_{index}'
+            final_path = os.path.join(parent_folder_path, newchild)
+            index += 1
+        os.mkdir(final_path)
+        
+        # Next create a YAML file for config
+
+        hyperparam_data = {
+            'channel multipliers' : tuple(self.channel_multipliers),
+            'is attention' : tuple(self.is_attention),
+            'n steps' : self.n_steps,
+            'batch size' :self.batch_size,
+            'n samples' : self.n_samples,
+            'learning rate' : self.learning_rate,
+            'Epochs' : self.epochs,
+            'Train Ratio' : self.train_ratio,
+            'ValRatio' : self.val_ratio
+        }
+
+        yaml_path = os.path.join(parent_folder_path, 'hyperparams.yaml')
+
+        with open(yaml_path, "w") as file:
+            yaml.dump(hyperparam_data, file, default_flow_style=False, sort_keys=False)
+
+        # Copy Losses CSV file from that path...
+
+        new_loss_file_destination = os.path.join(parent_folder_path, "Losses.csv")
+        shutil.copy(self.checkpoint_path, new_loss_file_destination)
+        # Use MatPlotLib to Add the plot
+
+        # read from the original csv / new works but its either or
+        df = pd.read_csv(self.checkpoint_path)
+
+        plt.figure(figsize=(8, 5))
+        plt.plot(df.iloc[0], marker="o", color="purple", linestyle="-")
+        
+        plot_path = os.path.join(parent_folder_path, "Epoch Plot")
+        plt.savefig(plot_path)
+
+        # the other paramters...
+
 
 
     def run(self, checkpoint_interval_batches: int = 100):
@@ -632,6 +690,7 @@ class Diffusion_model():
             batch_losses = []
         
         # after final 
+        self.save_final_results()
 
     def origin_sampling(self,epoch_num,starting_t=None,eval=False,subset_factor=1,samples=16):
         if(starting_t is None):
@@ -1053,44 +1112,6 @@ class Diffusion_model():
             return torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         except TypeError:
             return torch.load(checkpoint_path, map_location=self.device)
-
-    def save_final_losses(
-        self,
-        completed_epochs: int,
-        current_epoch: int,
-        next_batch_idx: int,
-        losses: List[float],
-        batch_losses: List[float],
-    ):
-        self.final_results_dir.mkdir(parents=True, exist_ok=True)
-        checkpoint = {
-            "format_version": 2,
-            # "model_state_dict": self.eps_model.state_dict(),
-            # "optimizer_state_dict": self.optimizer.state_dict(),
-            "completed_epochs": int(completed_epochs),
-            # "current_epoch": int(current_epoch),
-            # "next_batch_idx": int(next_batch_idx),
-            "losses": [float(loss) for loss in losses],
-            "batch_losses": [float(loss) for loss in batch_losses],
-            # "normalization_stats": self._normalization_stats_to_json(),
-            # "training_shuffle_seed": self.training_shuffle_seed,
-            # "rng_state": self._capture_rng_state(),
-        }
-        temp_path = self.final_checkpoint_path.with_suffix(self.final_checkpoint_path.suffix + ".tmp")
-        torch.save(checkpoint, temp_path)
-        os.replace(temp_path, self.final_checkpoint_path)
-        self._save_normalization_stats(self.final_normalization_stats_path)
-        self.final_losses_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.final_losses_path, 'w', newline='') as file:
-            writer = csv.writer(file, quoting=csv.QUOTE_NONNUMERIC)
-            writer.writerow([float(loss) for loss in losses])
-        self.loaded_checkpoint_state = {
-            "completed_epochs": int(completed_epochs),
-            "current_epoch": int(current_epoch),
-            "next_batch_idx": int(next_batch_idx),
-            "losses": [float(loss) for loss in losses],
-            "batch_losses": [float(loss) for loss in batch_losses],
-        }
 
     def save_training_checkpoint(
         self,

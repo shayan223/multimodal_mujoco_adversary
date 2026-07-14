@@ -146,3 +146,5 @@ wandb/
 sweep/
 
 *.csv
+
+Miniconda3-latest-linux-x86_64.sh
